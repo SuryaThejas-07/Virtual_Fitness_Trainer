@@ -1,4 +1,4 @@
-# AI Fit Coach
+# Virtual Fitness Trainer
 
 An AI-first fitness platform built from passion.
 
