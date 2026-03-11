@@ -109,13 +109,18 @@ npm run lint
 
 ## Environment Setup
 
-Copy `.env.example` to `.env.local` and update values:
+For GitHub/public users, copy `.env.github.example` to `.env.local` and update values:
 
 ```env
 VITE_CHATBOT_API_KEY=your_key_here
 VITE_CHATBOT_API_URL=https://api.openai.com/v1/chat/completions
 VITE_CHATBOT_MODEL=gpt-4o-mini
 ```
+
+Maintainer note:
+
+- `.env.example` can be kept as your personal/internal template.
+- `.env.github.example` is the safe template for contributors.
 
 Notes:
 
@@ -161,7 +166,7 @@ This is a Vite app and can be deployed easily to Vercel, Netlify, or Firebase Ho
 
 Before pushing publicly:
 
-1. Remove or rotate any real API keys from `.env.example` and local config.
+1. Share `.env.github.example` for contributors and keep real secrets in private local files only.
 2. Move Firebase config to environment variables if you want cleaner open-source hygiene.
 3. Verify `.gitignore` excludes `.env.local`.
 4. Run quality checks:
