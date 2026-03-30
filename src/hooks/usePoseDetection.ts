@@ -1583,6 +1583,17 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
     for (const baseUrl of POSE_ASSET_BASE_URLS) {
       try {
         lastBaseUrl = baseUrl;
+        
+        // Pre-check: verify critical assets exist before instantiating Pose
+        const criticalAssets = ["pose_web.binarypb", "pose_solution_wasm_bin.js"];
+        for (const asset of criticalAssets) {
+          const testUrl = `${baseUrl}/${asset}`;
+          const response = await fetch(testUrl, { method: "HEAD" });
+          if (!response.ok) {
+            throw new Error(`Asset unavailable: ${asset} (${response.status})`);
+          }
+        }
+        
         const pose = new Pose({
           locateFile: (file) => `${baseUrl}/${file}`,
         });
@@ -1615,7 +1626,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
     // Improved error message for local asset load failure
     const errorMsg = 
       lastBaseUrl === "/mediapipe/pose"
-        ? `AI model files not found. This is a deployment issue - contact support. Detail: ${detail}`
+        ? `AI model files not found at deployment. Verify public/mediapipe/pose/ was deployed. Detail: ${detail}`
         : `${detail}`;
     throw new Error(`pose-model-load-failed:${errorMsg}`);
   }, [onPoseResults]);
