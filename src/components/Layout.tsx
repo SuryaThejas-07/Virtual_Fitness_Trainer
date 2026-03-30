@@ -129,12 +129,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   );
                 })}
                 {user ? (
-                  <button
-                    onClick={() => { logout(); setMobileOpen(false); }}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary col-span-2"
-                  >
-                    <LogOut className="h-4 w-4" /> Logout
-                  </button>
+                  <>
+                    <Link
+                      to="/profile"
+                      onClick={() => setMobileOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary col-span-2"
+                    >
+                      <User className="h-4 w-4" /> Profile
+                    </Link>
+                    <button
+                      onClick={() => { logout(); setMobileOpen(false); }}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary col-span-2"
+                    >
+                      <LogOut className="h-4 w-4" /> Logout
+                    </button>
+                  </>
                 ) : (
                   <Link
                     to="/login"

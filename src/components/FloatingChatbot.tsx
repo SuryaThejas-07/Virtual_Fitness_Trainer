@@ -155,6 +155,11 @@ const RULE_BASED_RESPONSES: Array<{ pattern: RegExp; response: string }> = [
       "For nutrition, I can estimate calories/macros and suggest meal ideas. Example target: each meal can include lean protein + vegetables + a controlled carb source.",
   },
   {
+    pattern: /\b(weight|weights|dumbbell|barbell|load|kg|how much weight)\b/i,
+    response:
+      "I can help pick training weights. Tell me exercise + target reps + your level (beginner/intermediate), and I will suggest a safe starting range.",
+  },
+  {
     pattern: /\b(analytics|progress|report|chart)\b/i,
     response:
       "Go to **Analytics** to view trends for workouts, calories, and health progress over time.",
@@ -224,6 +229,25 @@ const FOOD_MACRO_DB: Record<string, FoodMacro> = {
 };
 
 function getResponse(input: string): string {
+  const lower = input.toLowerCase();
+
+  const asksForLegPlan = /\b(leg day|legs workout|leg workout|plan me for a leg day|prepare me for leg day|leg routine)\b/i.test(input);
+  if (asksForLegPlan) {
+    return [
+      "Leg Day Plan (beginner-friendly):",
+      "1. Squats: 4 sets x 12 reps",
+      "2. Lunges: 3 sets x 10 reps each leg",
+      "3. Jumping Jacks: 3 sets x 30 reps",
+      "4. Plank: 3 sets x 30-60 sec",
+      "Rest 45-60 sec between sets. Focus on form first, then increase reps week by week.",
+    ].join("\n");
+  }
+
+  const asksForWorkoutPlan = /\b(plan|prepare|routine|schedule)\b/i.test(lower) && /\b(workout|fitness|train|training|day|days|week|weekly|program)\b/i.test(lower);
+  if (asksForWorkoutPlan) {
+    return createWorkoutPlanFromPrompt(input);
+  }
+
   const asksAboutPage = /\b(about|what is|what does|explain|tell me about)\b/i.test(input) && /\b(page|screen|tab)\b/i.test(input);
   if (asksAboutPage) {
     for (const page of PAGE_INFO) {
@@ -242,6 +266,24 @@ function getResponse(input: string): string {
 
 function parseActivityInput(input: string): { name: ActivityName; reps: number } | null {
   const normalized = input.toLowerCase();
+
+  // Guard: planning/scheduling prompts with numbers (e.g., "7 day plan")
+  // must not be interpreted as rep logging.
+  const isPlanningPrompt =
+    /\b(plan|routine|schedule|program|prepare|create|generate)\b/i.test(normalized) &&
+    /\b(day|days|week|weekly)\b/i.test(normalized);
+  if (isPlanningPrompt) return null;
+
+  // Guard: nutrition/food quantity prompts should not become workout logs.
+  const isFoodPrompt = /\b(i ate|i had|food|meal|calories|protein|carbs|fats|nutrition)\b/i.test(normalized);
+  if (isFoodPrompt) return null;
+
+  // Require a logging intent so plain questions are not logged as reps.
+  const hasLoggingIntent =
+    /\b(i did|did|completed|finished|performed|done|log|logged|track|tracked)\b/i.test(normalized) ||
+    /\breps?\b/i.test(normalized);
+  if (!hasLoggingIntent) return null;
+
   const numberMatch = normalized.match(/\b(\d{1,4})\b/);
   if (!numberMatch) return null;
 
@@ -698,6 +740,104 @@ function createTimedGoalPlan(input: string): string {
   ].join("\n");
 }
 
+function getWeightSelectionGuidance(input: string): string {
+  const lower = input.toLowerCase();
+  const isBeginner = /beginner|new|starting|first time/i.test(lower);
+  const wantsMuscle = /muscle|bulk|strength|gain/i.test(lower);
+  const exercise = ACTIVITY_MATCHERS.find((m) => m.pattern.test(lower))?.name;
+
+  const baseAdvice =
+    "Pick a load where you can complete your target reps with good form and still have about 2 reps left in reserve (RIR 2). If form breaks, reduce weight.";
+
+  const exerciseAdvice: Record<ActivityName, string> = {
+    Squat: "For goblet squats, many beginners start around 8-14 kg; progress by 2-2.5 kg when all sets feel controlled.",
+    Pushup: "For pushups, adjust difficulty by incline/decline before adding weighted versions.",
+    Lunge: "For lunges, start with bodyweight or light dumbbells (4-8 kg each) and increase slowly.",
+    "Biceps Curl": "For curls, many beginners start around 4-8 kg dumbbells; keep elbows stable and avoid swinging.",
+    "Jumping Jack": "Jumping jacks are bodyweight cardio; increase total reps/time instead of external load.",
+    Plank: "Plank is time-based; increase hold duration or sets, then add light weighted plank only after clean form.",
+  };
+
+  const progression = wantsMuscle
+    ? "For muscle gain, stay mostly in 6-12 reps and increase load once you hit top reps for all sets."
+    : "For general fitness, stay in 8-15 reps and progress by small steps weekly.";
+
+  return [
+    "Weight Selection Guide:",
+    baseAdvice,
+    exercise ? exerciseAdvice[exercise] : "Tell me your exact exercise and I will give a better starting weight range.",
+    isBeginner
+      ? "Beginner rule: start lighter for week 1, master form, then increase gradually."
+      : "If you already train regularly, use your last successful weight as baseline and add small increments.",
+    progression,
+  ].join("\n");
+}
+
+function getNutritionCoaching(input: string): string {
+  const lower = input.toLowerCase();
+  const fatLoss = /fat|cut|lean|weight loss|lose/i.test(lower);
+  const muscleGain = /muscle|bulk|gain|strength/i.test(lower);
+
+  if (fatLoss) {
+    return [
+      "Fat Loss Nutrition Basics:",
+      "- Keep a 300-500 kcal daily deficit",
+      "- Protein: 1.6-2.2 g/kg body weight",
+      "- Keep mostly whole foods: lean protein, veggies, fruit, complex carbs",
+      "- Track meals daily to stay consistent",
+      "- Keep hydration high (2.5-3L/day)",
+    ].join("\n");
+  }
+
+  if (muscleGain) {
+    return [
+      "Muscle Gain Nutrition Basics:",
+      "- Keep a 200-350 kcal daily surplus",
+      "- Protein: 1.8-2.2 g/kg body weight",
+      "- Carbs around workout windows for energy/recovery",
+      "- Include healthy fats and enough sleep",
+      "- Track weekly body weight and adjust calories slowly",
+    ].join("\n");
+  }
+
+  return [
+    "Balanced Nutrition Starter:",
+    "- Protein each meal (eggs/chicken/fish/paneer/tofu)",
+    "- Fill half plate with vegetables",
+    "- Use carbs based on activity level",
+    "- Keep sugar/snack calories controlled",
+    "- Track meals in Nutrition Tracker for accuracy",
+  ].join("\n");
+}
+
+function getFoodTrackingHelp(): string {
+  return [
+    "How to track food quickly:",
+    "1. Type: `I ate 200g chicken breast`",
+    "2. Or ask: `protein in 3 eggs`",
+    "3. I will estimate calories/macros and save to Nutrition Tracker",
+    "4. Repeat for each meal/snack so daily totals stay accurate",
+    "Tip: include quantity (g or pieces) for best estimates.",
+  ].join("\n");
+}
+
+function getWorkoutSplitAdvice(input: string): string {
+  const lower = input.toLowerCase();
+  const daysMatch = lower.match(/(3|4|5|6)\s*(day|days)/i);
+  const days = daysMatch ? Number(daysMatch[1]) : 4;
+
+  if (days === 3) {
+    return "3-day split: Full Body A / Full Body B / Full Body C. Focus on consistency and progressive reps.";
+  }
+  if (days === 4) {
+    return "4-day split: Upper / Lower / Upper / Lower. Great for strength + muscle balance.";
+  }
+  if (days === 5) {
+    return "5-day split: Push / Pull / Legs / Upper / Lower (or weak-point day).";
+  }
+  return "6-day split: Push / Pull / Legs repeated twice with one lighter day for recovery.";
+}
+
 function buildApiMessages(history: Message[], latestInput: string, activitySummary: string): ApiMessage[] {
   const recent = history.slice(-8).map((m) => ({ role: m.role, content: m.content } as ApiMessage));
   return [
@@ -785,6 +925,10 @@ export function FloatingChatbot() {
     const wantsTimedGoalPlan =
       /\b(\d{1,3})\s*(day|days)\b/i.test(raw) &&
       /\b(lean|shred|lose|fat|burn|get fit|build|muscle|fitness|plan|goal|achieve|slim|cut)\b/i.test(raw);
+    const wantsWeightGuidance = /\b(weight|weights|dumbbell|barbell|load|kg|how much weight|what weight)\b/i.test(raw);
+    const wantsFoodTrackingHelp = /\b(how.*track.*food|how.*log.*food|track my food|log my food|nutrition tracker.*use)\b/i.test(raw);
+    const wantsNutritionCoaching = /\b(nutrition|diet|macro|macros|calorie|calories|protein target|fat loss diet|muscle gain diet)\b/i.test(raw);
+    const wantsWorkoutSplit = /\b(split|push pull legs|ppl|upper lower|workout split|weekly workout)\b/i.test(raw);
     const detectedActivity = parseActivityInput(raw);
     const detectedFoodLog = parseFoodLogIntent(raw);
     const foodMacroQuestion = parseFoodMacroQuestion(raw);
@@ -884,8 +1028,8 @@ export function FloatingChatbot() {
             reps: detectedActivity.reps,
             duration_minutes: estimate.durationMinutes,
             calories_burned: estimate.calories,
-            workout_type: "user logged",
-            ai_detected: true,
+            workout_type: "Chatbot",
+            ai_detected: false,
             timestamp: serverTimestamp(),
           });
         } catch {
@@ -953,6 +1097,30 @@ export function FloatingChatbot() {
     if (wantsTimedGoalPlan) {
       const plan = createTimedGoalPlan(raw);
       setMessages((prev) => [...prev, { role: "assistant", content: plan }]);
+      setSending(false);
+      return;
+    }
+
+    if (wantsWeightGuidance) {
+      setMessages((prev) => [...prev, { role: "assistant", content: getWeightSelectionGuidance(raw) }]);
+      setSending(false);
+      return;
+    }
+
+    if (wantsFoodTrackingHelp) {
+      setMessages((prev) => [...prev, { role: "assistant", content: getFoodTrackingHelp() }]);
+      setSending(false);
+      return;
+    }
+
+    if (wantsNutritionCoaching) {
+      setMessages((prev) => [...prev, { role: "assistant", content: getNutritionCoaching(raw) }]);
+      setSending(false);
+      return;
+    }
+
+    if (wantsWorkoutSplit) {
+      setMessages((prev) => [...prev, { role: "assistant", content: getWorkoutSplitAdvice(raw) }]);
       setSending(false);
       return;
     }

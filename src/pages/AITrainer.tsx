@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Camera, CameraOff, RotateCcw, Activity, CheckCircle2, AlertTriangle, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import plankImg from "@/assets/exercise-plank.png";
 import { usePoseDetection, type ExerciseType } from "@/hooks/usePoseDetection";
 import { useAuth } from "@/contexts/AuthContext";
 import { addFirestoreDoc } from "@/hooks/useFirestore";
+import { useToast } from "@/hooks/use-toast";
 import { serverTimestamp } from "firebase/firestore";
 
 const exercises: ExerciseType[] = ["Biceps Curl", "Squat", "Pushup", "Lunge", "Jumping Jack", "Plank"];
@@ -21,12 +22,14 @@ const exerciseGuidance: Record<
   ExerciseType,
   {
     image: string;
+    cameraFacing: string;
     manual: string[];
     aiExpectations: string[];
   }
 > = {
   Squat: {
     image: squatImg,
+    cameraFacing: "Face the laptop directly (front view). Keep both shoulders visible and centered.",
     manual: [
       "Feet shoulder-width, chest up, core tight.",
       "Sit hips back and down until thighs are near parallel.",
@@ -40,6 +43,7 @@ const exerciseGuidance: Record<
   },
   Pushup: {
     image: pushupImg,
+    cameraFacing: "Turn to your right side toward the laptop (side view) so shoulder-hip-knee line is visible.",
     manual: [
       "Start in a straight plank with hands under shoulders.",
       "Lower chest with elbows controlled, then press back up.",
@@ -53,6 +57,7 @@ const exerciseGuidance: Record<
   },
   "Biceps Curl": {
     image: curlImg,
+    cameraFacing: "Face the laptop directly (front view) with elbows and wrists fully visible.",
     manual: [
       "Keep elbows close to torso with shoulders relaxed.",
       "Curl weight up with control and lower fully.",
@@ -66,6 +71,7 @@ const exerciseGuidance: Record<
   },
   Lunge: {
     image: lungeImg,
+    cameraFacing: "Turn to your left or right side toward the laptop (side view) to show knee depth clearly.",
     manual: [
       "Step forward and lower until both knees bend well.",
       "Front knee stays above ankle; torso remains upright.",
@@ -79,6 +85,7 @@ const exerciseGuidance: Record<
   },
   "Jumping Jack": {
     image: jackImg,
+    cameraFacing: "Face the laptop directly (front view) so both arms and legs stay in frame.",
     manual: [
       "Jump feet wide while raising arms overhead.",
       "Return feet together and arms to sides.",
@@ -92,6 +99,7 @@ const exerciseGuidance: Record<
   },
   Plank: {
     image: plankImg,
+    cameraFacing: "Turn to your right side toward the laptop (side view) for best plank-line tracking.",
     manual: [
       "Elbows under shoulders; body in one straight line.",
       "Brace core and glutes to avoid hip drop.",
@@ -100,7 +108,7 @@ const exerciseGuidance: Record<
     aiExpectations: [
       "Shoulder-hip-ankle alignment remains stable.",
       "Shoulders stay stacked over elbows.",
-      "Hold is credited every 3s when posture is 75% or higher.",
+      "Goal is time-based: hold good form until your selected target duration.",
     ],
   },
 };
@@ -115,7 +123,13 @@ const formatTime = (seconds: number): string => {
 
 export default function AITrainer() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [selectedExercise, setSelectedExercise] = useState<ExerciseType>("Squat");
+  const previousCameraOnRef = useRef(false);
+  const [savingWorkoutLog, setSavingWorkoutLog] = useState(false);
+  const [targetReps, setTargetReps] = useState(10);
+  const [targetSets, setTargetSets] = useState(3);
+  const [hasLoggedCurrentTarget, setHasLoggedCurrentTarget] = useState(false);
 
   const {
     videoRef,
@@ -131,10 +145,22 @@ export default function AITrainer() {
     distanceHint,
     currentPhase,
     liveChecks,
+    activePlankTime,
+    perfectPlankTime,
+    perfectPlankTimeAtTarget,
+    targetPlankTime,
+    plankCompleted,
+    setTargetPlankTime,
     startCamera,
     stopCamera,
     resetSession,
   } = usePoseDetection(selectedExercise);
+
+  const isPlank = selectedExercise === "Plank";
+  const plankProgress = useMemo(() => {
+    if (!isPlank || targetPlankTime <= 0) return 0;
+    return Math.min(100, (activePlankTime / targetPlankTime) * 100);
+  }, [activePlankTime, isPlank, targetPlankTime]);
 
   const distanceBadgeClass = useMemo(() => {
     if (distanceStatus === "good") return "bg-emerald-500/20 text-emerald-200 border border-emerald-300/30";
@@ -158,25 +184,168 @@ export default function AITrainer() {
 
   const selectedGuidance = useMemo(() => exerciseGuidance[selectedExercise], [selectedExercise]);
 
-  const toggleCamera = async () => {
-    if (cameraOn) {
-      stopCamera();
-      // Save session to ai_workout_analysis if meaningful data was recorded
-      if (user && elapsedSeconds >= 5) {
+  const targetTotalReps = useMemo(() => targetReps * targetSets, [targetReps, targetSets]);
+
+  const completedSets = useMemo(() => {
+    if (isPlank) {
+      if (targetPlankTime <= 0) return 0;
+      return Math.min(targetSets, Math.floor(elapsedSeconds / targetPlankTime));
+    }
+    return Math.min(targetSets, Math.floor(reps / targetReps));
+  }, [elapsedSeconds, isPlank, reps, targetPlankTime, targetReps, targetSets]);
+
+  const currentSetReps = useMemo(() => {
+    if (isPlank) {
+      return 0;
+    }
+    return reps % targetReps;
+  }, [isPlank, reps, targetReps]);
+
+  const targetReached = useMemo(() => {
+    if (isPlank) {
+      return completedSets >= targetSets;
+    }
+    return reps >= targetTotalReps;
+  }, [completedSets, isPlank, reps, targetSets, targetTotalReps]);
+
+  const targetProgress = useMemo(() => {
+    if (isPlank) {
+      const totalTargetSeconds = targetPlankTime * targetSets;
+      if (totalTargetSeconds <= 0) return 0;
+      return Math.min(100, (elapsedSeconds / totalTargetSeconds) * 100);
+    }
+    if (targetTotalReps <= 0) return 0;
+    return Math.min(100, (reps / targetTotalReps) * 100);
+  }, [elapsedSeconds, isPlank, reps, targetPlankTime, targetSets, targetTotalReps]);
+
+  useEffect(() => {
+    if (selectedExercise === "Plank") {
+      setTargetSets(1);
+    } else {
+      setTargetSets(3);
+      setTargetReps(10);
+    }
+    setHasLoggedCurrentTarget(false);
+  }, [selectedExercise]);
+
+  useEffect(() => {
+    const justStopped = previousCameraOnRef.current && !cameraOn;
+    previousCameraOnRef.current = cameraOn;
+
+    if (!justStopped) {
+      return;
+    }
+
+    const durationSeconds = Math.max(
+      0,
+      isPlank ? elapsedSeconds : elapsedSeconds
+    );
+
+    const hasCompletedSession =
+      (isPlank && (plankCompleted || activePlankTime > 0.5)) ||
+      (!isPlank && (reps > 0 || durationSeconds > 0));
+
+    if (!hasCompletedSession || !user) {
+      return;
+    }
+
+    const saveAnalysis = async () => {
+      try {
         const feedback =
           postureScore >= 85 ? "excellent" : postureScore >= 65 ? "good" : "needs_improvement";
         await addFirestoreDoc("ai_workout_analysis", user.uid, {
           exercise_name: selectedExercise.toLowerCase().replace(/ /g, "_"),
-          reps_detected: reps,
+          reps_detected: isPlank ? 0 : reps,
           posture_score: postureScore,
           calories_estimated: calories,
+          duration_seconds: durationSeconds,
+          good_plank_seconds: Number(activePlankTime.toFixed(1)),
+          active_plank_seconds: Number(activePlankTime.toFixed(1)),
+          perfect_plank_seconds: Number(perfectPlankTime.toFixed(1)),
           feedback,
           recorded_at: serverTimestamp(),
         });
+      } catch {
+        toast({
+          variant: "destructive",
+          title: "Session save failed",
+          description: "Could not save AI analysis for this workout.",
+        });
       }
+    };
+
+    void saveAnalysis();
+  }, [
+    activePlankTime,
+    calories,
+    cameraOn,
+    elapsedSeconds,
+    isPlank,
+    plankCompleted,
+    perfectPlankTime,
+    postureScore,
+    reps,
+    selectedExercise,
+    toast,
+    user,
+  ]);
+
+  const toggleCamera = async () => {
+    if (cameraOn) {
+      stopCamera();
       return;
     }
+
+    setHasLoggedCurrentTarget(false);
     await startCamera();
+  };
+
+  const handleResetSession = () => {
+    setHasLoggedCurrentTarget(false);
+    resetSession();
+  };
+
+  const saveWorkoutLog = async () => {
+    if (!user || savingWorkoutLog) {
+      return;
+    }
+
+    const durationSeconds = Math.max(1, elapsedSeconds);
+
+    setSavingWorkoutLog(true);
+    try {
+      await addFirestoreDoc("workouts", user.uid, {
+        exercise_name: selectedExercise,
+        sets: isPlank ? completedSets : targetSets,
+        reps: isPlank ? 0 : reps,
+        duration_minutes: Number((durationSeconds / 60).toFixed(2)),
+        calories_burned: Number(calories.toFixed(1)),
+        workout_type: "AI Trainer",
+        ai_detected: true,
+        target_sets: targetSets,
+        target_reps: isPlank ? 0 : targetReps,
+        target_seconds: isPlank ? targetPlankTime : 0,
+        completed_sets: completedSets,
+        good_plank_seconds: Number(activePlankTime.toFixed(1)),
+        active_plank_seconds: Number(activePlankTime.toFixed(1)),
+        perfect_plank_seconds: Number(perfectPlankTime.toFixed(1)),
+        timestamp: serverTimestamp(),
+      });
+
+      toast({
+        title: "Workout logged",
+        description: "This session is now saved in Workout Tracker.",
+      });
+      setHasLoggedCurrentTarget(true);
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Unable to log workout",
+        description: "Please try saving this session again.",
+      });
+    } finally {
+      setSavingWorkoutLog(false);
+    }
   };
 
   return (
@@ -286,7 +455,7 @@ export default function AITrainer() {
                   {cameraOn ? <CameraOff className="h-4 w-4 mr-2" /> : <Camera className="h-4 w-4 mr-2" />}
                   {cameraOn ? "Stop" : "Start Camera"}
                 </Button>
-                <Button variant="outline" size="sm" onClick={resetSession}>
+                <Button variant="outline" size="sm" onClick={handleResetSession}>
                   <RotateCcw className="h-4 w-4 mr-1" /> Reset
                 </Button>
               </div>
@@ -295,17 +464,164 @@ export default function AITrainer() {
 
           {/* Stats Row */}
           <div className="grid grid-cols-3 gap-4">
-            <div className="bg-card rounded-xl border p-4 shadow-card text-center">
-              <p className="text-sm text-muted-foreground mb-1">Reps</p>
-              <p className="text-3xl font-display font-bold text-primary">{reps}</p>
+            {isPlank ? (
+              <>
+                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
+                  <p className="text-sm text-muted-foreground mb-1">Plank Timer</p>
+                  <p className="text-2xl font-display font-bold text-primary">
+                    {elapsedSeconds}s / {targetPlankTime}s
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1">Good: {activePlankTime.toFixed(1)}s | Perfect: {perfectPlankTime.toFixed(1)}s</p>
+                  {perfectPlankTimeAtTarget > 0 && (
+                    <p className="text-[11px] text-emerald-300 mt-1">Perfect Recorded @ Target: {perfectPlankTimeAtTarget.toFixed(1)}s</p>
+                  )}
+                </div>
+                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
+                  <p className="text-sm text-muted-foreground mb-1">Progress</p>
+                  <p className="text-3xl font-display font-bold">{Math.round(plankProgress)}%</p>
+                  <Progress value={plankProgress} className="h-2 mt-2" />
+                </div>
+                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
+                  <p className="text-sm text-muted-foreground mb-1">Calories</p>
+                  <p className="text-3xl font-display font-bold text-accent">{calories}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {plankCompleted ? "Goal reached! Keep holding" : "Time-based burn"}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
+                  <p className="text-sm text-muted-foreground mb-1">Reps</p>
+                  <p className="text-3xl font-display font-bold text-primary">{reps}</p>
+                </div>
+                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
+                  <p className="text-sm text-muted-foreground mb-1">Posture Score</p>
+                  <p className="text-3xl font-display font-bold">{postureScore}%</p>
+                </div>
+                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
+                  <p className="text-sm text-muted-foreground mb-1">Calories</p>
+                  <p className="text-3xl font-display font-bold text-accent">{calories}</p>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="bg-card rounded-xl border p-4 shadow-card space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="font-medium">Target & Workout Log</p>
+              <span className={`text-xs px-2 py-1 rounded-full border ${targetReached ? "text-emerald-300 border-emerald-500/40 bg-emerald-500/10" : "text-amber-300 border-amber-500/40 bg-amber-500/10"}`}>
+                {targetReached ? "Target Reached" : "Target In Progress"}
+              </span>
             </div>
-            <div className="bg-card rounded-xl border p-4 shadow-card text-center">
-              <p className="text-sm text-muted-foreground mb-1">Posture Score</p>
-              <p className="text-3xl font-display font-bold">{postureScore}%</p>
-            </div>
-            <div className="bg-card rounded-xl border p-4 shadow-card text-center">
-              <p className="text-sm text-muted-foreground mb-1">Calories</p>
-              <p className="text-3xl font-display font-bold text-accent">{calories}</p>
+
+            {isPlank ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm text-muted-foreground mr-1">Target Time:</p>
+                  {[30, 60, 120].map((seconds) => (
+                    <button
+                      key={seconds}
+                      onClick={() => setTargetPlankTime(seconds)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        targetPlankTime === seconds
+                          ? "bg-gradient-primary text-primary-foreground shadow-card"
+                          : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                      }`}
+                    >
+                      {seconds}s
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm text-muted-foreground mr-1">Target Sets:</p>
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button
+                      key={value}
+                      onClick={() => {
+                        setTargetSets(value);
+                        setHasLoggedCurrentTarget(false);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                        targetSets === value
+                          ? "bg-gradient-primary text-primary-foreground shadow-card"
+                          : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                      }`}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Done: {activePlankTime.toFixed(1)}s | Set Progress: {completedSets}/{targetSets} | Perfect: {perfectPlankTime.toFixed(1)}s
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm text-muted-foreground">Target Reps:</p>
+                    {[8, 10, 12, 15, 20].map((value) => (
+                      <button
+                        key={value}
+                        onClick={() => {
+                          setTargetReps(value);
+                          setHasLoggedCurrentTarget(false);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                          targetReps === value
+                            ? "bg-gradient-primary text-primary-foreground shadow-card"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                        }`}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm text-muted-foreground">Target Sets:</p>
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <button
+                        key={value}
+                        onClick={() => {
+                          setTargetSets(value);
+                          setHasLoggedCurrentTarget(false);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                          targetSets === value
+                            ? "bg-gradient-primary text-primary-foreground shadow-card"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                        }`}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Target: {targetSets} x {targetReps} = {targetTotalReps} reps | Done: {reps} reps | Sets: {completedSets}/{targetSets} | Current Set: {currentSetReps}/{targetReps}
+                </p>
+              </div>
+            )}
+
+            <Progress value={targetProgress} className="h-2" />
+
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                {hasLoggedCurrentTarget
+                  ? "Workout already logged for this target."
+                  : targetReached
+                    ? "Target complete. You can now log this workout."
+                    : "You can still log this workout even if target is not complete."}
+              </p>
+              <Button
+                size="sm"
+                className="bg-gradient-primary text-primary-foreground"
+                onClick={saveWorkoutLog}
+                disabled={savingWorkoutLog || hasLoggedCurrentTarget}
+              >
+                {savingWorkoutLog ? "Saving..." : hasLoggedCurrentTarget ? "Logged" : "Log Workout"}
+              </Button>
             </div>
           </div>
 
@@ -375,6 +691,9 @@ export default function AITrainer() {
             <div className="md:col-span-3 p-4 md:p-5 space-y-5">
               <div>
                 <h3 className="font-display font-semibold mb-2">Section 1: Exercise Manual ({selectedExercise})</h3>
+                <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground mb-3">
+                  <span className="font-medium text-foreground">Camera Direction:</span> {selectedGuidance.cameraFacing}
+                </div>
                 <ul className="space-y-1.5 text-sm text-muted-foreground">
                   {selectedGuidance.manual.map((step, idx) => (
                     <li key={idx}>{idx + 1}. {step}</li>
@@ -385,9 +704,13 @@ export default function AITrainer() {
               <div className="h-px bg-border" />
 
               <div>
-                <h3 className="font-display font-semibold mb-2">Section 2: What System Requires To Count Rep</h3>
+                <h3 className="font-display font-semibold mb-2">
+                  {isPlank ? "Section 2: What System Requires To Complete Goal" : "Section 2: What System Requires To Count Rep"}
+                </h3>
                 <p className="text-xs text-muted-foreground mb-3">
-                  The rep is counted only if these conditions are satisfied.
+                  {isPlank
+                    ? "The timer progresses only while posture is valid."
+                    : "The rep is counted only if these conditions are satisfied."}
                 </p>
                 <ul className="space-y-1.5 text-sm text-muted-foreground mb-3">
                   {selectedGuidance.aiExpectations.map((rule, idx) => (

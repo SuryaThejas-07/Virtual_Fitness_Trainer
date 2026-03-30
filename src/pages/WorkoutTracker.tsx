@@ -13,19 +13,38 @@ type TimestampLike = { toDate: () => Date };
 interface Workout {
   id: string;
   exercise_name: string;
-  sets: number;
-  reps: number;
-  duration_minutes: number;
-  calories_burned: number;
-  workout_type: string;
-  ai_detected: boolean;
+  sets?: number;
+  reps?: number;
+  duration_minutes?: number;
+  calories_burned?: number;
+  workout_type?: string;
+  ai_detected?: boolean;
+  target_seconds?: number;
   timestamp: TimestampLike | Date | null;
 }
+
+const displayWorkoutType = (workout: Workout): string => {
+  const type = (workout.workout_type ?? "").toLowerCase();
+
+  if (type.includes("chatbot")) return "Chatbot";
+  if (type.includes("ai trainer") || type.includes("ai_trainer")) return "AI Trainer";
+  if (type.includes("user") || type.includes("strength")) return "User Logged";
+
+  // Backward compatibility: older chatbot logs were saved with ai_detected=true + user logged type.
+  if (workout.ai_detected && type.includes("user logged")) return "Chatbot";
+  if (workout.ai_detected) return "AI Trainer";
+
+  return "User Logged";
+};
+
+const isPlankWorkout = (workout: Workout): boolean => {
+  return workout.exercise_name.toLowerCase() === "plank" || (workout.target_seconds ?? 0) > 0;
+};
 
 export default function WorkoutTracker() {
   const { user } = useAuth();
   const { data: workouts, loading } = useFirestoreCollection<Workout>("workouts");
-  const [form, setForm] = useState({ exercise: "", sets: "", reps: "", duration: "", calories: "", type: "strength" });
+  const [form, setForm] = useState({ exercise: "", sets: "", reps: "", duration: "", calories: "", type: "User Logged" });
   const [showForm, setShowForm] = useState(false);
 
   const addWorkout = async () => {
@@ -36,11 +55,11 @@ export default function WorkoutTracker() {
       reps: Number(form.reps) || 0,
       duration_minutes: Number(form.duration) || 0,
       calories_burned: Number(form.calories) || 0,
-      workout_type: form.type,
+      workout_type: "User Logged",
       ai_detected: false,
       timestamp: serverTimestamp(),
     });
-    setForm({ exercise: "", sets: "", reps: "", duration: "", calories: "", type: "strength" });
+    setForm({ exercise: "", sets: "", reps: "", duration: "", calories: "", type: "User Logged" });
     setShowForm(false);
   };
 
@@ -96,11 +115,11 @@ export default function WorkoutTracker() {
                 {workouts.map((w, i) => (
                   <motion.tr key={w.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }} className="border-b last:border-0 hover:bg-secondary/20 transition-colors">
                     <td className="p-4 font-medium">{w.exercise_name}</td>
-                    <td className="p-4 text-center">{w.sets}</td>
-                    <td className="p-4 text-center">{w.reps}</td>
-                    <td className="p-4 text-center text-muted-foreground">{w.duration_minutes} min</td>
-                    <td className="p-4 text-center"><span className="text-accent font-medium">{w.calories_burned} kcal</span></td>
-                    <td className="p-4 text-center text-sm text-muted-foreground capitalize">{w.workout_type}</td>
+                    <td className="p-4 text-center">{w.sets ?? 0}</td>
+                    <td className="p-4 text-center">{isPlankWorkout(w) ? "-" : (w.reps ?? 0)}</td>
+                    <td className="p-4 text-center text-muted-foreground">{(w.duration_minutes ?? 0).toFixed(1)} min</td>
+                    <td className="p-4 text-center"><span className="text-accent font-medium">{(w.calories_burned ?? 0).toFixed(1)} kcal</span></td>
+                    <td className="p-4 text-center text-sm text-muted-foreground">{displayWorkoutType(w)}</td>
                     <td className="p-4 text-center">
                       <button onClick={() => deleteFirestoreDoc("workouts", w.id)} className="text-muted-foreground hover:text-destructive transition-colors">
                         <Trash2 className="h-4 w-4" />
