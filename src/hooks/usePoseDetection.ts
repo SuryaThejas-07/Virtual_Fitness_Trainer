@@ -360,14 +360,18 @@ const getCameraErrorMessage = (error: unknown): string => {
   }
 
   if (error instanceof Error) {
+    if (error.message.startsWith("pose-model-load-failed:")) {
+      const detail = error.message.replace("pose-model-load-failed:", "").trim();
+      return detail
+        ? `Camera opened but AI model initialization failed (${detail}).`
+        : "Camera opened but AI model initialization failed.";
+    }
+
     if (error.message === "camera-unavailable") {
       return "No working camera was found on this device/browser. Try another browser or device.";
     }
     if (error.message === "video-playback-failed") {
       return "Camera opened but video playback failed in this browser. Please open this site in Chrome or Safari and retry.";
-    }
-    if (error.message === "pose-model-load-failed") {
-      return "Camera opened but AI model files failed to load. Check internet/ad blocker/firewall and retry.";
     }
     if (error.message === "video-metadata-timeout") {
       return "Camera opened but video stream did not initialize in time. Please retry.";
@@ -1570,13 +1574,15 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
     rafRef.current = requestAnimationFrame(loop);
   }, []);
 
-  const ensurePose = useCallback(async () => {
+  const ensurePose = useCallback(async (warmupImage?: CanvasImageSource) => {
     if (poseRef.current) return;
 
     let lastError: unknown = null;
+    let lastBaseUrl = "";
 
     for (const baseUrl of POSE_ASSET_BASE_URLS) {
       try {
+        lastBaseUrl = baseUrl;
         const pose = new Pose({
           locateFile: (file) => `${baseUrl}/${file}`,
         });
@@ -1590,11 +1596,10 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
 
         pose.onResults(onPoseResults);
 
-        // Warmup run to verify model assets are actually reachable.
-        const warmupCanvas = document.createElement("canvas");
-        warmupCanvas.width = 2;
-        warmupCanvas.height = 2;
-        await pose.send({ image: warmupCanvas });
+        // Warmup run to verify model assets are reachable using the current video frame.
+        if (warmupImage) {
+          await pose.send({ image: warmupImage });
+        }
 
         poseRef.current = pose;
         return;
@@ -1603,7 +1608,11 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       }
     }
 
-    throw lastError ?? new Error("pose-model-load-failed");
+    const detail =
+      lastError instanceof Error
+        ? `${lastBaseUrl} | ${lastError.name || "Error"}: ${lastError.message}`
+        : lastBaseUrl || "unknown-source";
+    throw new Error(`pose-model-load-failed:${detail}`);
   }, [onPoseResults]);
 
   useEffect(() => {
@@ -1669,11 +1678,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
         }
       }
 
-      try {
-        await ensurePose();
-      } catch {
-        throw new Error("pose-model-load-failed");
-      }
+      await ensurePose(video);
       setCameraOn(true);
       startTimeRef.current = performance.now();
       setElapsedSeconds(0);
