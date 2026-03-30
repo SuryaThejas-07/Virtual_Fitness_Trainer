@@ -320,11 +320,10 @@ const CAMERA_CONSTRAINTS: MediaStreamConstraints[] = [
   { video: true },
 ];
 
-const MEDIAPIPE_POSE_VERSION = "0.5.1675469404";
-
+// Use ONLY local assets to avoid CDN version mismatches.
+// Local MediaPipe files are in public/mediapipe/pose/ and deployed with the app.
 const POSE_ASSET_BASE_URLS = [
   "/mediapipe/pose",
-  `https://cdn.jsdelivr.net/npm/@mediapipe/pose@${MEDIAPIPE_POSE_VERSION}`,
 ] as const;
 
 const angleFromThreePoints = (a: { x: number; y: number; z?: number }, b: { x: number; y: number; z?: number }, c: { x: number; y: number; z?: number }): number => {
@@ -1613,7 +1612,12 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       lastError instanceof Error
         ? `${lastBaseUrl} | ${lastError.name || "Error"}: ${lastError.message}`
         : lastBaseUrl || "unknown-source";
-    throw new Error(`pose-model-load-failed:${detail}`);
+    // Improved error message for local asset load failure
+    const errorMsg = 
+      lastBaseUrl === "/mediapipe/pose"
+        ? `AI model files not found. This is a deployment issue - contact support. Detail: ${detail}`
+        : `${detail}`;
+    throw new Error(`pose-model-load-failed:${errorMsg}`);
   }, [onPoseResults]);
 
   useEffect(() => {
