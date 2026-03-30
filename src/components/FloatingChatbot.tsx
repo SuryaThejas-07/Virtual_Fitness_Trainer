@@ -238,22 +238,240 @@ function getMotivationalQuote(seed?: number): string {
 }
 
 const FOOD_MACRO_DB: Record<string, FoodMacro> = {
+  // PROTEINS - MEATS & POULTRY
   "chicken breast": { calories: 165, protein: 31, carbs: 0, fats: 3.6 },
   "chicken wings": { calories: 290, protein: 27, carbs: 0, fats: 19 },
-  egg: { calories: 143, protein: 12.6, carbs: 1.1, fats: 9.5 },
-  rice: { calories: 130, protein: 2.7, carbs: 28, fats: 0.3 },
-  oats: { calories: 389, protein: 16.9, carbs: 66.3, fats: 6.9 },
-  banana: { calories: 89, protein: 1.1, carbs: 23, fats: 0.3 },
-  apple: { calories: 52, protein: 0.3, carbs: 14, fats: 0.2 },
-  salmon: { calories: 208, protein: 20, carbs: 0, fats: 13 },
-  tuna: { calories: 132, protein: 29, carbs: 0, fats: 1 },
-  bread: { calories: 265, protein: 9, carbs: 49, fats: 3.2 },
-  milk: { calories: 61, protein: 3.2, carbs: 4.8, fats: 3.3 },
-  yogurt: { calories: 59, protein: 10, carbs: 3.6, fats: 0.4 },
-  paneer: { calories: 265, protein: 18, carbs: 1.2, fats: 21 },
-  tofu: { calories: 76, protein: 8, carbs: 1.9, fats: 4.8 },
-  potato: { calories: 77, protein: 2, carbs: 17, fats: 0.1 },
+  "chicken thigh": { calories: 180, protein: 25, carbs: 0, fats: 10 },
+  "turkey breast": { calories: 135, protein: 29.9, carbs: 0, fats: 1 },
+  "lean beef": { calories: 180, protein: 26, carbs: 0, fats: 8 },
+  "ground beef 93%": { calories: 175, protein: 24, carbs: 0, fats: 8 },
+  "pork tenderloin": { calories: 142, protein: 27, carbs: 0, fats: 3 },
+  "lamb": { calories: 294, protein: 25, carbs: 0, fats: 21 },
+  
+  // PROTEINS - FISH & SEAFOOD
+  "salmon": { calories: 208, protein: 20, carbs: 0, fats: 13 },
+  "tuna": { calories: 132, protein: 29, carbs: 0, fats: 1 },
+  "canned tuna": { calories: 99, protein: 21.5, carbs: 0, fats: 0.7 },
+  "white fish": { calories: 82, protein: 17.4, carbs: 0, fats: 0.7 },
+  "cod fillet": { calories: 82, protein: 17.8, carbs: 0, fats: 0.7 },
+  "tilapia": { calories: 96, protein: 20, carbs: 0, fats: 1.7 },
+  "mackerel": { calories: 305, protein: 25, carbs: 0, fats: 23 },
+  "shrimp": { calories: 99, protein: 24, carbs: 0, fats: 0.3 },
+  
+  // PROTEINS - EGGS & DAIRY
+  "egg whole": { calories: 143, protein: 12.6, carbs: 1.1, fats: 9.5 },
+  "egg white": { calories: 17, protein: 3.6, carbs: 0.4, fats: 0.1 },
+  "greek yogurt": { calories: 59, protein: 10, carbs: 3.6, fats: 0.4 },
+  "milk": { calories: 61, protein: 3.2, carbs: 4.8, fats: 3.3 },
+  "paneer": { calories: 265, protein: 18, carbs: 1.2, fats: 21 },
+  "cottage cheese": { calories: 98, protein: 28, carbs: 3.4, fats: 0.4 },
+  "mozzarella": { calories: 280, protein: 27, carbs: 3, fats: 17 },
+  "cheddar": { calories: 403, protein: 23.5, carbs: 3.4, fats: 33 },
+  
+  // PROTEINS - PLANT-BASED
+  "tofu": { calories: 76, protein: 8, carbs: 1.9, fats: 4.8 },
+  "tempeh": { calories: 193, protein: 19, carbs: 14, fats: 11 },
+  "lentils": { calories: 116, protein: 9, carbs: 20, fats: 0.4 },
+  "chickpeas": { calories: 119, protein: 8.9, carbs: 21, fats: 2.1 },
+  "black beans": { calories: 94, protein: 8.7, carbs: 17, fats: 0.3 },
+  "peanut butter": { calories: 588, protein: 25, carbs: 20, fats: 50 },
+  "almonds": { calories: 579, protein: 21, carbs: 22, fats: 50 },
+  
+  // CARBS - GRAINS
+  "rice": { calories: 130, protein: 2.7, carbs: 28, fats: 0.3 },
+  "brown rice": { calories: 111, protein: 2.6, carbs: 23, fats: 0.9 },
+  "bread": { calories: 265, protein: 9, carbs: 49, fats: 3.2 },
+  "whole wheat bread": { calories: 247, protein: 12, carbs: 41, fats: 3 },
+  "oats": { calories: 389, protein: 16.9, carbs: 66.3, fats: 6.9 },
+  "sweet potato": { calories: 103, protein: 1.6, carbs: 24, fats: 0.1 },
+  "potato": { calories: 77, protein: 2, carbs: 17, fats: 0.1 },
+  "quinoa": { calories: 222, protein: 8.1, carbs: 39, fats: 3.9 },
+  "pasta": { calories: 131, protein: 5, carbs: 25, fats: 1.1 },
+  "whole wheat pasta": { calories: 124, protein: 5.3, carbs: 24, fats: 0.9 },
+  
+  // CARBS - FRUITS
+  "banana": { calories: 89, protein: 1.1, carbs: 23, fats: 0.3 },
+  "apple": { calories: 52, protein: 0.3, carbs: 14, fats: 0.2 },
+  "orange": { calories: 47, protein: 0.9, carbs: 12, fats: 0.3 },
+  "berries": { calories: 57, protein: 0.7, carbs: 14, fats: 0.3 },
+  "mango": { calories: 60, protein: 0.8, carbs: 15, fats: 0.4 },
+  
+  // CARBS - VEGETABLES
+  "broccoli": { calories: 34, protein: 2.8, carbs: 7, fats: 0.4 },
+  "carrots": { calories: 41, protein: 0.9, carbs: 10, fats: 0.2 },
+  "spinach": { calories: 23, protein: 2.9, carbs: 3.6, fats: 0.4 },
+  "bell pepper": { calories: 31, protein: 1, carbs: 7, fats: 0.3 },
+  "green beans": { calories: 31, protein: 1.8, carbs: 7, fats: 0.2 },
+  "cabbage": { calories: 25, protein: 1.3, carbs: 6, fats: 0.1 },
+  "asparagus": { calories: 20, protein: 2.2, carbs: 4, fats: 0.1 },
+  "peas": { calories: 81, protein: 5.4, carbs: 14, fats: 0.4 },
+  
+  // FATS & OILS
+  "olive oil": { calories: 884, protein: 0, carbs: 0, fats: 100 },
+  "butter": { calories: 717, protein: 0.9, carbs: 0.1, fats: 81 },
+  "avocado": { calories: 160, protein: 2, carbs: 9, fats: 15 },
+  "walnuts": { calories: 654, protein: 15, carbs: 14, fats: 66 },
+  "coconut oil": { calories: 892, protein: 0, carbs: 0, fats: 100 },
+  
+  // COMPOSITE MEALS
+  "grilled chicken bowl": { calories: 450, protein: 45, carbs: 40, fats: 10 },
+  "salmon rice": { calories: 480, protein: 35, carbs: 50, fats: 12 },
+  "turkey sandwich": { calories: 380, protein: 28, carbs: 42, fats: 10 },
+  "omelette 2 egg": { calories: 280, protein: 25, carbs: 4, fats: 19 },
+  "pasta bolognese": { calories: 520, protein: 35, carbs: 55, fats: 15 },
+  "veggie stir fry": { calories: 280, protein: 12, carbs: 35, fats: 8 },
 };
+
+function generateIntelligenMealSuggestions(
+  dailyCalories: number,
+  proteinG: number,
+  carbsG: number,
+  fatsG: number,
+  dietStyle: DietStyle,
+  goal: PlanGoal
+): { breakfast: string; lunch: string; dinner: string; snacks: string } {
+  const isBulking = goal === "weight_gain";
+  const isCutting = goal === "weight_loss";
+
+  const mealCals = {
+    breakfast: Math.round(dailyCalories * 0.25),
+    lunch: Math.round(dailyCalories * 0.35),
+    dinner: Math.round(dailyCalories * 0.3),
+    snacks: Math.round(dailyCalories * 0.1),
+  };
+
+  // Omnivore breakfast options
+  const breakfastOmnivore = [
+    isBulking
+      ? "4 eggs + 2 slices toast + 1 banana + 1 tbsp peanut butter"
+      : "3 egg whites + 2 slices whole wheat toast + oatmeal + berries",
+    "2 cups Greek yogurt + granola (40g) + honey + almonds (25g)",
+    "250g oatmeal + chicken breast (100g) + apple + 1 tbsp honey",
+    "200g cottage cheese + berries + almonds (30g) + honey",
+    "Turkey sausage (150g) + scrambled eggs (2) + whole wheat toast",
+  ];
+
+  const breakfastVegetarian = [
+    "4 eggs + 2 slices toast + 1 tbsp peanut butter + banana",
+    "2 cups Greek yogurt + granola (40g) + honey + walnuts",
+    "Paneer (150g) scrambled + toast (2 slices) + tomato + spinach",
+    "Tofu scramble (200g) + whole wheat bread (2 slices) + avocado",
+    "Protein shake: milk (300ml) + oats (50g) + banana + almond butter",
+  ];
+
+  const breakfastVegan = [
+    "Oatmeal (100g) + almond butter (2 tbsp) + banana + almond milk",
+    "Tofu scramble (200g) + whole wheat toast (2 slices) + avocado (1/2)",
+    "Protein shake: soy milk (300ml) + hemp seeds + berries + oats",
+    "Chickpea pancakes (150g) + maple syrup + berries",
+    "Tempeh bacon (100g) + baked beans (200g) + whole grain toast",
+  ];
+
+  const lunchOmnivore = [
+    isBulking
+      ? "Grilled chicken (250g) + basmati rice (150g) + olive oil (1 tbsp) + broccoli"
+      : "Grilled chicken (200g) + brown rice (100g) + steamed vegetables + lemon",
+    "Salmon fillet (200g) + sweet potato (200g) + asparagus + olive oil",
+    "Lean beef (200g) + rice (100g) + bell peppers + onions",
+    "Turkey (200g) + quinoa (100g) + mixed vegetables",
+    "Canned tuna (200g) + pasta (80g) + olive oil + vegetables",
+  ];
+
+  const lunchVegetarian = [
+    "Paneer (200g) grilled + basmati rice (150g) + dal (100g) + salad",
+    "Chickpea curry (300g) + brown rice (120g) + yogurt (100g)",
+    "Lentil soup (400ml) + whole grain bread (2 slices) + cheese + vegetables",
+    "Tofu stir-fry (250g) + rice noodles (100g) + mixed vegetables + sesame oil",
+    "Cottage cheese (200g) + sweet potato (200g) + green beans + olive oil",
+  ];
+
+  const lunchVegan = [
+    "Lentil bowl (350g cooked) + brown rice (100g) + tahini dressing",
+    "Chickpea Buddha bowl: chickpeas (250g) + quinoa (100g) + vegetables + tahini",
+    "Tofu steak (250g) + sweet potato (200g) + steamed broccoli + coconut oil",
+    "Black bean and rice bowl with avocado and salsa",
+    "Tempeh (200g) stir fry + noodles (100g) + peanut sauce + vegetables",
+  ];
+
+  const dinnerOmnivore = [
+    isBulking
+      ? "Grilled chicken (280g) + pasta (120g) + Alfredo sauce (50ml) + garlic bread"
+      : "Baked cod (220g) + sweet potato (180g) + roasted vegetables",
+    "Beef ribeye (220g) + potatoes (200g) + green beans + butter",
+    "Turkey meatballs (250g) + marinara + pasta (100g) + salad",
+    "Salmon (220g) + brown rice (120g) + bok choy + ginger sauce",
+    "Lean ground turkey (250g) + tacos (3-4) + salsa + Greek yogurt",
+  ];
+
+  const dinnerVegetarian = [
+    "Paneer tikka (250g) + basmati rice (150g) + yogurt sauce + vegetables",
+    "Vegetable stir-fry (400g) with tofu (200g) + rice (120g) + cashew nuts",
+    "Lentils (300g cooked) + sweet potato (180g) + spinach + cheese",
+    "Chickpea pasta: pasta (100g) + chickpea sauce (250g) + olive oil + salad",
+    "Stuffed bell peppers (300g) with cheese & vegetables + rice",
+  ];
+
+  const dinnerVegan = [
+    "Tofu steak (280g) + roasted vegetables + brown rice (120g) + tahini",
+    "Lentil bolognese (350g) + pasta (100g) + cashew cream + vegetables",
+    "Buddha bowl: quinoa (100g) + black beans (150g) + roasted veggies + peanut sauce",
+    "Chickpea curry (400g) + basmati rice (120g) + coconut milk",
+    "Tempeh (250g) barbecue + sweet potato wedges (250g) + coleslaw",
+  ];
+
+  const snacksOmnivore = [
+    "Protein shake: whey protein (30g) + banana + milk (200ml)",
+    "Greek yogurt (200g) + granola (20g) + honey",
+    "Almonds (40g) + apple",
+    "Cottage cheese (150g) + berries",
+    "Turkey jerky (50g) + almonds (30g)",
+  ];
+
+  const snacksVegetarian = [
+    "Protein shake: milk (200ml) + protein powder (30g) + oats (30g)",
+    "Greek yogurt (150g) + nuts (30g) + honey",
+    "String cheese + apple + almonds",
+    "Paneer (100g) + nuts (25g)",
+    "Protein bar (40g protein) + banana",
+  ];
+
+  const snacksVegan = [
+    "Protein shake: soy milk (200ml) + hemp seeds (2 tbsp) + berries",
+    "Hummus (100g) + raw veggies + whole grain crackers",
+    "Almonds (50g) + dried fruit (30g)",
+    "Tofu (100g) + soy sauce snack",
+    "Energy balls: dates + almonds + coconut",
+  ];
+
+  const diet = dietStyle === "vegan" ? "vegan" : dietStyle === "vegetarian" ? "vegetarian" : "omnivore";
+
+  return {
+    breakfast:
+      diet === "omnivore"
+        ? breakfastOmnivore[Math.floor(Math.random() * breakfastOmnivore.length)]
+        : diet === "vegetarian"
+          ? breakfastVegetarian[Math.floor(Math.random() * breakfastVegetarian.length)]
+          : breakfastVegan[Math.floor(Math.random() * breakfastVegan.length)],
+    lunch:
+      diet === "omnivore"
+        ? lunchOmnivore[Math.floor(Math.random() * lunchOmnivore.length)]
+        : diet === "vegetarian"
+          ? lunchVegetarian[Math.floor(Math.random() * lunchVegetarian.length)]
+          : lunchVegan[Math.floor(Math.random() * lunchVegan.length)],
+    dinner:
+      diet === "omnivore"
+        ? dinnerOmnivore[Math.floor(Math.random() * dinnerOmnivore.length)]
+        : diet === "vegetarian"
+          ? dinnerVegetarian[Math.floor(Math.random() * dinnerVegetarian.length)]
+          : dinnerVegan[Math.floor(Math.random() * dinnerVegan.length)],
+    snacks:
+      diet === "omnivore"
+        ? snacksOmnivore[Math.floor(Math.random() * snacksOmnivore.length)]
+        : diet === "vegetarian"
+          ? snacksVegetarian[Math.floor(Math.random() * snacksVegetarian.length)]
+          : snacksVegan[Math.floor(Math.random() * snacksVegan.length)],
+  };
+}
 
 function getResponse(input: string): string {
   const lower = input.toLowerCase();
@@ -559,29 +777,122 @@ function parseFoodMacroQuestion(input: string): { foodKey: string; quantity: { a
   return { foodKey, quantity: parseFoodQuantity(lower) };
 }
 
-function getProteinSuggestions(totalProteinConsumed: number, proteinGoal: number): string {
+function getAdvancedProteinSuggestions(totalProteinConsumed: number, proteinGoal: number, dietStyle: DietStyle): string {
   const remaining = proteinGoal - totalProteinConsumed;
 
   if (remaining <= 0) {
-    return `Protein target hit! You've consumed ${totalProteinConsumed.toFixed(1)}g of your ${proteinGoal}g goal today. 🎉 Focus on hydration and recovery now!`;
+    return `✅ Protein target hit! You've consumed ${totalProteinConsumed.toFixed(1)}g of your ${proteinGoal}g goal today. 🎉\n\nFocus on hydration and recovery now! Aim for 2-3L water and quality sleep tonight.`;
   }
 
-  const sorted = Object.entries(FOOD_MACRO_DB)
-    .filter(([, m]) => m.protein > 10)
-    .sort(([, a], [, b]) => b.protein - a.protein)
-    .slice(0, 3);
+  if (remaining <= 5) {
+    return `Almost there! Just ${remaining.toFixed(1)}g protein left to hit your ${proteinGoal}g goal.\n\nHave a small snack: handful of nuts, Greek yogurt, or protein shake.`;
+  }
 
-  const suggestions = sorted.map(([name, macro]) => {
-    const gNeeded = Math.ceil((remaining / macro.protein) * 100);
-    return `- **${name}**: ~${gNeeded}g → ~${remaining.toFixed(0)}g protein (${Math.round((gNeeded * macro.calories) / 100)} kcal)`;
+  const proteinSources =
+    dietStyle === "vegan"
+      ? [
+          { name: "Hemp seeds", protein: 10, serving: "2 tbsp (~10g)" },
+          { name: "Pea protein shake", protein: 25, serving: "1 scoop (~25g)" },
+          { name: "Tempeh", protein: 19, serving: "100g" },
+          { name: "Tofu", protein: 8, serving: "100g" },
+          { name: "Lentils", protein: 9, serving: "100g cooked" },
+          { name: "Chickpeas", protein: 9, serving: "100g" },
+          { name: "Peanut butter", protein: 8, serving: "2 tbsp" },
+          { name: "Almonds", protein: 6, serving: "25g" },
+        ]
+      : dietStyle === "vegetarian"
+        ? [
+            { name: "Greek yogurt", protein: 10, serving: "100g" },
+            { name: "Cottage cheese", protein: 28, serving: "100g" },
+            { name: "Paneer", protein: 18, serving: "100g" },
+            { name: "Egg whites", protein: 3.6, serving: "1 egg white" },
+            { name: "Milk", protein: 3.2, serving: "100ml" },
+            { name: "Protein shake", protein: 25, serving: "1 scoop" },
+            { name: "Lentils", protein: 9, serving: "100g cooked" },
+            { name: "Chickpeas", protein: 9, serving: "100g" },
+          ]
+        : [
+            { name: "Chicken breast", protein: 31, serving: "100g" },
+            { name: "Turkey", protein: 29.9, serving: "100g" },
+            { name: "Lean beef", protein: 26, serving: "100g" },
+            { name: "Salmon", protein: 20, serving: "100g" },
+            { name: "Tuna (canned)", protein: 21.5, serving: "100g" },
+            { name: "Eggs", protein: 12.6, serving: "1 whole egg" },
+            { name: "Shrimp", protein: 24, serving: "100g" },
+            { name: "Whey protein", protein: 25, serving: "1 scoop" },
+          ];
+
+  const topOptions = proteinSources.slice(0, 5);
+  const suggestions = topOptions.map((source) => {
+    const servingsNeeded = Math.ceil((remaining / source.protein) * 100) / 100;
+    const servingText = servingsNeeded === 1 ? source.serving : `${servingsNeeded}x ${source.serving}`;
+    return `- **${source.name}**: ${servingText} (~${remaining.toFixed(0)}g protein)`;
   });
 
   return [
-    `Protein tracker: ${totalProteinConsumed.toFixed(1)}g consumed / ${proteinGoal}g goal — **${remaining.toFixed(1)}g still needed.**`,
-    "Top foods to close the gap:",
+    `🥗 Protein Goal: ${totalProteinConsumed.toFixed(1)}g / ${proteinGoal}g (${remaining.toFixed(1)}g remaining)`,
+    "",
+    "💪 Best options to hit your target:",
     ...suggestions,
-    "Log your next meal and I'll keep tracking! 🥗",
+    "",
+    "Pro tip: Pair protein with carbs post-workout for better muscle recovery!",
   ].join("\n");
+}
+
+function getNutrientAdvice(
+  totalCalories: number,
+  totalProtein: number,
+  totalCarbs: number,
+  totalFats: number,
+  goals: GoalEntry | null,
+  goal: PlanGoal
+): string {
+  const calorieGoal = goals?.daily_calories ?? 2200;
+  const proteinGoal = goals?.protein_target_g ?? 150;
+  const carbsGoal = goals?.carbs_target_g ?? 250;
+  const fatsGoal = goals?.fats_target_g ?? 65;
+
+  const calPercent = Math.round((totalCalories / calorieGoal) * 100);
+  const proteinPercent = Math.round((totalProtein / proteinGoal) * 100);
+  const carbsPercent = Math.round((totalCarbs / carbsGoal) * 100);
+  const fatsPercent = Math.round((totalFats / fatsGoal) * 100);
+
+  const lines = [
+    `📊 **Daily Macro Breakdown:**`,
+    `- Calories: ${totalCalories} / ${calorieGoal} kcal (${calPercent}%)`,
+    `- Protein: ${totalProtein.toFixed(0)}g / ${proteinGoal}g (${proteinPercent}%)`,
+    `- Carbs: ${totalCarbs.toFixed(0)}g / ${carbsGoal}g (${carbsPercent}%)`,
+    `- Fats: ${totalFats.toFixed(0)}g / ${fatsGoal}g (${fatsPercent}%)`,
+    "",
+  ];
+
+  if (goal === "weight_loss") {
+    if (calPercent < 85) {
+      lines.push("💚 Calories are under target - you can add more food for sustainability.");
+    } else if (calPercent > 110) {
+      lines.push("⚠️ Calories exceeded - prioritize protein, reduce high-fat snacks tomorrow.");
+    } else {
+      lines.push("✅ Calories are on track for your fat loss goal!");
+    }
+  } else if (goal === "weight_gain") {
+    if (calPercent < 90) {
+      lines.push("📈 Need more calories! Add bulking meals: rice, pasta, peanut butter, oily fish.");
+    } else {
+      lines.push("✅ Calories are good for muscle gain!");
+    }
+  }
+
+  if (proteinPercent < 85) {
+    lines.push(`💪 Add ${Math.round(proteinGoal - totalProtein)}g more protein today.`);
+  } else if (proteinPercent >= 100) {
+    lines.push("✅ Protein target hit - excellent work!");
+  }
+
+  if (carbsPercent < 70 && goal === "weight_gain") {
+    lines.push("🍚 Add more carbs for energy and performance!");
+  }
+
+  return lines.join("\n");
 }
 
 function getDashboardCoachAdvice(params: {
@@ -1005,12 +1316,14 @@ function buildPersonalizedPlan(profile: PlannerProfile): string {
       ? ["Strength Full Body", "HIIT + Core", "Lower Body", "Steady Cardio", "Upper Body", "Mobility"].slice(0, profile.workoutDays)
       : ["Push", "Pull", "Legs", "Rest/Light Cardio", "Upper Hypertrophy", "Lower Hypertrophy"].slice(0, profile.workoutDays);
 
-  const mealOptions =
-    profile.dietStyle === "vegan"
-      ? ["Tofu/tempeh + quinoa + salad", "Soy chunks + brown rice + veggies", "Lentils + oats + nuts"]
-      : profile.dietStyle === "vegetarian"
-        ? ["Paneer/tofu + rice + vegetables", "Greek yogurt + oats + fruit", "Dal + roti + curd + salad"]
-        : ["Chicken/fish + rice + vegetables", "Eggs + oats + fruit", "Lean meat + potato + salad"];
+  const mealSuggestions = generateIntelligenMealSuggestions(
+    Math.round(targetCalories),
+    proteinG,
+    carbsG,
+    fatG,
+    profile.dietStyle,
+    profile.goal
+  );
 
   return [
     `Personal ${goalLabel[profile.goal]} Plan (${profile.timelineWeeks} weeks)`,
@@ -1034,8 +1347,11 @@ function buildPersonalizedPlan(profile: PlannerProfile): string {
     "Workout Option B:",
     ...splitB.map((day, idx) => `${idx + 1}. ${day}`),
     "",
-    "Meal Options (choose 3-4 daily):",
-    ...mealOptions.map((x, i) => `${i + 1}. ${x}`),
+    "📋 Sample Daily Meal Plan:",
+    `🌅 Breakfast: ${mealSuggestions.breakfast}`,
+    `🍽️ Lunch: ${mealSuggestions.lunch}`,
+    `🥘 Dinner: ${mealSuggestions.dinner}`,
+    `🍎 Snacks: ${mealSuggestions.snacks}`,
     "",
     "Progress Expectation:",
     profile.goal === "weight_loss"
@@ -1044,10 +1360,13 @@ function buildPersonalizedPlan(profile: PlannerProfile): string {
         ? `- Expected weight gain in ${profile.timelineWeeks} weeks: ~${expectedChangeKg} kg`
         : `- Expected recomposition progress in ${profile.timelineWeeks} weeks: visible strength + body-shape improvement`,
     "",
-    "Execution Rules:",
-    "- Hit protein target daily before optimizing carbs/fats",
+    "💪 Execution Rules:",
+    "- Hit protein and calorie targets daily (most important!)",
     "- Track food in Nutrition Tracker and workouts in Workout Tracker",
+    "- Log your meals with portions for accurate macro tracking",
     "- Adjust calories by +/-150 kcal if weight trend stalls for 2 weeks",
+    "- Rotate meals for variety and sustainability",
+    "- Stay hydrated and get 7-9 hours of sleep",
   ].join("\n");
 }
 
@@ -1397,7 +1716,7 @@ export function FloatingChatbot() {
       const goalsRef = (goalsData[0] as GoalEntry | undefined) ?? null;
       const proteinGoalForFood = goalsRef?.protein_target_g ?? 150;
       const proteinConsumedSoFar = foods.reduce((sum, f) => sum + (f.protein_g || 0), 0) + scaled.protein;
-      const proteinTip = getProteinSuggestions(proteinConsumedSoFar, proteinGoalForFood);
+      const proteinTip = getAdvancedProteinSuggestions(proteinConsumedSoFar, proteinGoalForFood, "omnivore");
 
       setMessages((prev) => [
         ...prev,
@@ -1506,7 +1825,7 @@ export function FloatingChatbot() {
       const goals = (goalsData[0] as GoalEntry | undefined) ?? null;
       const proteinGoal = goals?.protein_target_g ?? 150;
       const totalProtein = foods.reduce((sum, f) => sum + (f.protein_g || 0), 0);
-      const reply = getProteinSuggestions(totalProtein, proteinGoal);
+      const reply = getAdvancedProteinSuggestions(totalProtein, proteinGoal, "omnivore");
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
       setSending(false);
       return;
