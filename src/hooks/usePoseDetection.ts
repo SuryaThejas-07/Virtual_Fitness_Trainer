@@ -321,6 +321,7 @@ const CAMERA_CONSTRAINTS: MediaStreamConstraints[] = [
 ];
 
 const POSE_ASSET_BASE_URLS = [
+  "/mediapipe/pose",
   "https://cdn.jsdelivr.net/npm/@mediapipe/pose",
   "https://unpkg.com/@mediapipe/pose",
 ] as const;
