@@ -320,10 +320,11 @@ const CAMERA_CONSTRAINTS: MediaStreamConstraints[] = [
   { video: true },
 ];
 
+const MEDIAPIPE_POSE_VERSION = "0.5.1675469404";
+
 const POSE_ASSET_BASE_URLS = [
   "/mediapipe/pose",
-  "https://cdn.jsdelivr.net/npm/@mediapipe/pose",
-  "https://unpkg.com/@mediapipe/pose",
+  `https://cdn.jsdelivr.net/npm/@mediapipe/pose@${MEDIAPIPE_POSE_VERSION}`,
 ] as const;
 
 const angleFromThreePoints = (a: { x: number; y: number; z?: number }, b: { x: number; y: number; z?: number }, c: { x: number; y: number; z?: number }): number => {
