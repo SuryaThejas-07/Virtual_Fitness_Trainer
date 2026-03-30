@@ -1579,24 +1579,55 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
 
     let lastError: unknown = null;
     let lastBaseUrl = "";
+    const diagnostics: string[] = [];
 
     for (const baseUrl of POSE_ASSET_BASE_URLS) {
       try {
         lastBaseUrl = baseUrl;
+        diagnostics.push(`\n📍 Trying: ${baseUrl}`);
         
         // Pre-check: verify critical assets exist before instantiating Pose
         const criticalAssets = ["pose_web.binarypb", "pose_solution_wasm_bin.js"];
         for (const asset of criticalAssets) {
           const testUrl = `${baseUrl}/${asset}`;
-          const response = await fetch(testUrl, { method: "HEAD" });
-          if (!response.ok) {
-            throw new Error(`Asset unavailable: ${asset} (${response.status})`);
+          try {
+            const response = await fetch(testUrl, { method: "HEAD" });
+            const contentLength = response.headers.get("content-length");
+            const contentType = response.headers.get("content-type");
+            diagnostics.push(
+              `  ${asset}: ${response.status} | Type: ${contentType || "unknown"} | Size: ${contentLength || "unknown"}`
+            );
+            
+            if (!response.ok) {
+              throw new Error(`Asset HTTP error: ${response.status}`);
+            }
+          } catch (fetchErr) {
+            diagnostics.push(`  ${asset}: ❌ Fetch failed - ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`);
+            throw fetchErr;
           }
         }
         
+        diagnostics.push(`✓ Assets verified at ${baseUrl}`);
+        diagnostics.push(`📦 Checking global Pose availability...`);
+        
+        // Check if Pose is available before trying to instantiate
+        if (typeof (window as any).Pose === "undefined") {
+          diagnostics.push("⚠️ window.Pose is undefined at this moment");
+        } else {
+          diagnostics.push(`✓ window.Pose is defined (type: ${typeof (window as any).Pose})`);
+        }
+        
+        diagnostics.push(`🚀 Calling new Pose() constructor...`);
+        
         const pose = new Pose({
-          locateFile: (file) => `${baseUrl}/${file}`,
+          locateFile: (file) => {
+            const url = `${baseUrl}/${file}`;
+            diagnostics.push(`  locateFile("${file}") → ${url}`);
+            return url;
+          },
         });
+
+        diagnostics.push(`✓ Pose constructor succeeded`);
 
         pose.setOptions({
           modelComplexity: 1,
@@ -1607,27 +1638,40 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
 
         pose.onResults(onPoseResults);
 
-        // Warmup run to verify model assets are reachable using the current video frame.
+        // Warm up run to verify model initialization
         if (warmupImage) {
+          diagnostics.push("Running warmup with video frame...");
           await pose.send({ image: warmupImage });
+          diagnostics.push("✓ Warmup successful");
         }
 
         poseRef.current = pose;
+        console.log("✅ Pose initialized successfully:", diagnostics.join("\n"));
         return;
       } catch (error) {
         lastError = error;
+        const errMsg = error instanceof Error ? error.message : String(error);
+        const errName = error instanceof Error ? error.name : "Unknown";
+        diagnostics.push(`❌ Error (${errName}): ${errMsg}`);
+        
+        // Capture stack trace if available
+        if (error instanceof Error && error.stack) {
+          diagnostics.push(`Stack: ${error.stack.split('\n').slice(0, 3).join(' | ')}`);
+        }
       }
     }
 
-    const detail =
-      lastError instanceof Error
-        ? `${lastBaseUrl} | ${lastError.name || "Error"}: ${lastError.message}`
-        : lastBaseUrl || "unknown-source";
-    // Improved error message for local asset load failure
+    const fullDiagnostics = diagnostics.join("\n");
+    console.error("Pose initialization failed:", fullDiagnostics);
+    
+    // Check what Pose is at runtime
+    console.error("Runtime check - typeof window.Pose:", typeof (window as any).Pose);
+    if (typeof (window as any).Pose === "object") {
+      console.error("window.Pose object keys:", Object.keys((window as any).Pose || {}).slice(0, 10));
+    }
+    
     const errorMsg = 
-      lastBaseUrl === "/mediapipe/pose"
-        ? `AI model files not found at deployment. Verify public/mediapipe/pose/ was deployed. Detail: ${detail}`
-        : `${detail}`;
+      `Files verification failed.\n${fullDiagnostics}\n\nTry:\n1. Clear browser cache (Ctrl+Shift+Delete)\n2. Do a hard refresh (Ctrl+Shift+R)\n3. Check browser DevTools Network tab for failed requests`;
     throw new Error(`pose-model-load-failed:${errorMsg}`);
   }, [onPoseResults]);
 
