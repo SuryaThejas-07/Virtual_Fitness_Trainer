@@ -58,6 +58,33 @@ interface GoalEntry {
   fats_target_g?: number;
 }
 
+type PlanGoal = "weight_loss" | "weight_gain" | "recomposition";
+type BiologicalSex = "male" | "female";
+type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_active";
+type DietStyle = "omnivore" | "vegetarian" | "vegan";
+type PlannerStep =
+  | "goal"
+  | "timeline"
+  | "age"
+  | "sex"
+  | "weight"
+  | "height"
+  | "activity"
+  | "workout_days"
+  | "diet";
+
+interface PlannerProfile {
+  goal: PlanGoal;
+  timelineWeeks: number;
+  age: number;
+  sex: BiologicalSex;
+  weightKg: number;
+  heightCm: number;
+  activityLevel: ActivityLevel;
+  workoutDays: number;
+  dietStyle: DietStyle;
+}
+
 const CHATBOT_API_KEY = import.meta.env.VITE_CHATBOT_API_KEY;
 const CHATBOT_API_URL = import.meta.env.VITE_CHATBOT_API_URL ?? "https://api.openai.com/v1/chat/completions";
 const CHATBOT_MODEL = import.meta.env.VITE_CHATBOT_MODEL ?? "gpt-4o-mini";
@@ -838,6 +865,192 @@ function getWorkoutSplitAdvice(input: string): string {
   return "6-day split: Push / Pull / Legs repeated twice with one lighter day for recovery.";
 }
 
+function parseGoal(value: string): PlanGoal | null {
+  const lower = value.toLowerCase();
+  if (/\b(1|loss|lose|fat|cut|weight loss|shred|lean)\b/.test(lower)) return "weight_loss";
+  if (/\b(2|gain|bulk|muscle gain|put on|weight gain)\b/.test(lower)) return "weight_gain";
+  if (/\b(3|recomp|recomposition|body recomposition|maintain and build)\b/.test(lower)) return "recomposition";
+  return null;
+}
+
+function parseTimelineWeeks(value: string): number | null {
+  const lower = value.toLowerCase();
+  const weekMatch = lower.match(/(\d{1,2})\s*(week|weeks|wk|wks)/i);
+  if (weekMatch) return Math.min(52, Math.max(4, Number(weekMatch[1])));
+  const dayMatch = lower.match(/(\d{1,3})\s*(day|days)/i);
+  if (dayMatch) {
+    const weeks = Math.round(Number(dayMatch[1]) / 7);
+    return Math.min(52, Math.max(4, weeks));
+  }
+  const plain = lower.match(/\b(\d{1,3})\b/);
+  if (plain) return Math.min(52, Math.max(4, Number(plain[1])));
+  return null;
+}
+
+function parseNumberInRange(value: string, min: number, max: number): number | null {
+  const match = value.match(/\b(\d{1,3}(?:\.\d)?)\b/);
+  if (!match) return null;
+  const num = Number(match[1]);
+  if (!Number.isFinite(num)) return null;
+  if (num < min || num > max) return null;
+  return num;
+}
+
+function parseSex(value: string): BiologicalSex | null {
+  const lower = value.toLowerCase();
+  if (/\b(1|male|man|m)\b/.test(lower)) return "male";
+  if (/\b(2|female|woman|f)\b/.test(lower)) return "female";
+  return null;
+}
+
+function parseWeightKg(value: string): number | null {
+  const lower = value.toLowerCase();
+  const num = parseNumberInRange(lower, 30, 300);
+  if (!num) return null;
+  if (/\b(lb|lbs|pound|pounds)\b/.test(lower)) {
+    return Number((num * 0.453592).toFixed(1));
+  }
+  return num;
+}
+
+function parseHeightCm(value: string): number | null {
+  const lower = value.toLowerCase();
+  const feetInches = lower.match(/(\d)\s*'?\s*(\d{1,2})\s*(?:\"|in|inch|inches)?/i);
+  if (feetInches && /'|ft|feet/.test(lower)) {
+    const feet = Number(feetInches[1]);
+    const inches = Number(feetInches[2]);
+    const cm = feet * 30.48 + inches * 2.54;
+    if (cm >= 120 && cm <= 230) return Number(cm.toFixed(1));
+  }
+
+  const cmMatch = lower.match(/(\d{3})\s*(cm|centimeter|centimeters)?/i);
+  if (cmMatch) {
+    const cm = Number(cmMatch[1]);
+    if (cm >= 120 && cm <= 230) return cm;
+  }
+
+  return null;
+}
+
+function parseActivityLevel(value: string): ActivityLevel | null {
+  const lower = value.toLowerCase();
+  if (/\b(1|sedentary|desk|rarely|inactive)\b/.test(lower)) return "sedentary";
+  if (/\b(2|light|lightly|1-3|one to three)\b/.test(lower)) return "light";
+  if (/\b(3|moderate|moderately|3-5|three to five)\b/.test(lower)) return "moderate";
+  if (/\b(4|active|hard|6-7|six to seven)\b/.test(lower)) return "active";
+  if (/\b(5|very active|athlete|twice)\b/.test(lower)) return "very_active";
+  return null;
+}
+
+function parseDietStyle(value: string): DietStyle | null {
+  const lower = value.toLowerCase();
+  if (/\b(1|omnivore|non veg|non-veg|mixed)\b/.test(lower)) return "omnivore";
+  if (/\b(2|vegetarian|veg)\b/.test(lower)) return "vegetarian";
+  if (/\b(3|vegan)\b/.test(lower)) return "vegan";
+  return null;
+}
+
+function buildPersonalizedPlan(profile: PlannerProfile): string {
+  const activityMultipliers: Record<ActivityLevel, number> = {
+    sedentary: 1.2,
+    light: 1.375,
+    moderate: 1.55,
+    active: 1.725,
+    very_active: 1.9,
+  };
+
+  const goalLabel: Record<PlanGoal, string> = {
+    weight_loss: "Weight Loss",
+    weight_gain: "Weight Gain",
+    recomposition: "Body Recomposition",
+  };
+
+  const bmr =
+    profile.sex === "male"
+      ? 10 * profile.weightKg + 6.25 * profile.heightCm - 5 * profile.age + 5
+      : 10 * profile.weightKg + 6.25 * profile.heightCm - 5 * profile.age - 161;
+  const tdee = bmr * activityMultipliers[profile.activityLevel];
+
+  const targetCalories =
+    profile.goal === "weight_loss"
+      ? tdee - 500
+      : profile.goal === "weight_gain"
+        ? tdee + 300
+        : tdee - 150;
+
+  const proteinFactor = profile.goal === "weight_gain" ? 1.8 : 2.0;
+  const fatFactor = profile.goal === "weight_gain" ? 0.9 : 0.8;
+
+  const proteinG = Math.round(profile.weightKg * proteinFactor);
+  const fatG = Math.round(profile.weightKg * fatFactor);
+  const carbsG = Math.max(80, Math.round((targetCalories - proteinG * 4 - fatG * 9) / 4));
+  const waterL = Number(Math.max(2.5, profile.weightKg * 0.035 + profile.workoutDays * 0.2).toFixed(1));
+
+  const expectedChangeKg =
+    profile.goal === "weight_loss"
+      ? Number((profile.timelineWeeks * 0.45).toFixed(1))
+      : profile.goal === "weight_gain"
+        ? Number((profile.timelineWeeks * 0.2).toFixed(1))
+        : Number((profile.timelineWeeks * 0.1).toFixed(1));
+
+  const splitA =
+    profile.workoutDays <= 3
+      ? ["Full Body A", "Full Body B", "Cardio + Core"]
+      : profile.workoutDays === 4
+        ? ["Upper", "Lower", "Upper + Core", "Lower + Conditioning"]
+        : ["Push", "Pull", "Legs", "Upper", "Lower", "Conditioning"].slice(0, profile.workoutDays);
+
+  const splitB =
+    profile.goal === "weight_loss"
+      ? ["Strength Full Body", "HIIT + Core", "Lower Body", "Steady Cardio", "Upper Body", "Mobility"].slice(0, profile.workoutDays)
+      : ["Push", "Pull", "Legs", "Rest/Light Cardio", "Upper Hypertrophy", "Lower Hypertrophy"].slice(0, profile.workoutDays);
+
+  const mealOptions =
+    profile.dietStyle === "vegan"
+      ? ["Tofu/tempeh + quinoa + salad", "Soy chunks + brown rice + veggies", "Lentils + oats + nuts"]
+      : profile.dietStyle === "vegetarian"
+        ? ["Paneer/tofu + rice + vegetables", "Greek yogurt + oats + fruit", "Dal + roti + curd + salad"]
+        : ["Chicken/fish + rice + vegetables", "Eggs + oats + fruit", "Lean meat + potato + salad"];
+
+  return [
+    `Personal ${goalLabel[profile.goal]} Plan (${profile.timelineWeeks} weeks)`,
+    "",
+    "Profile Summary:",
+    `- Age: ${profile.age} | Sex: ${profile.sex}`,
+    `- Weight: ${profile.weightKg} kg | Height: ${profile.heightCm} cm`,
+    `- Activity: ${profile.activityLevel} | Training days: ${profile.workoutDays}/week`,
+    `- Diet style: ${profile.dietStyle}`,
+    "",
+    "Daily Nutrition Targets:",
+    `- Calories: ${Math.round(targetCalories)} kcal/day`,
+    `- Protein: ${proteinG} g/day`,
+    `- Carbs: ${carbsG} g/day`,
+    `- Fats: ${fatG} g/day`,
+    `- Water: ${waterL} L/day`,
+    "",
+    "Workout Option A:",
+    ...splitA.map((day, idx) => `${idx + 1}. ${day}`),
+    "",
+    "Workout Option B:",
+    ...splitB.map((day, idx) => `${idx + 1}. ${day}`),
+    "",
+    "Meal Options (choose 3-4 daily):",
+    ...mealOptions.map((x, i) => `${i + 1}. ${x}`),
+    "",
+    "Progress Expectation:",
+    profile.goal === "weight_loss"
+      ? `- Expected fat loss in ${profile.timelineWeeks} weeks: ~${expectedChangeKg} kg`
+      : profile.goal === "weight_gain"
+        ? `- Expected weight gain in ${profile.timelineWeeks} weeks: ~${expectedChangeKg} kg`
+        : `- Expected recomposition progress in ${profile.timelineWeeks} weeks: visible strength + body-shape improvement`,
+    "",
+    "Execution Rules:",
+    "- Hit protein target daily before optimizing carbs/fats",
+    "- Track food in Nutrition Tracker and workouts in Workout Tracker",
+    "- Adjust calories by +/-150 kcal if weight trend stalls for 2 weeks",
+  ].join("\n");
+}
+
 function buildApiMessages(history: Message[], latestInput: string, activitySummary: string): ApiMessage[] {
   const recent = history.slice(-8).map((m) => ({ role: m.role, content: m.content } as ApiMessage));
   return [
@@ -898,6 +1111,8 @@ export function FloatingChatbot() {
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [plannerStep, setPlannerStep] = useState<PlannerStep | null>(null);
+  const [plannerDraft, setPlannerDraft] = useState<Partial<PlannerProfile>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -914,6 +1129,206 @@ export function FloatingChatbot() {
     setInput("");
     setSending(true);
 
+    const finishPlanner = () => {
+      setPlannerStep(null);
+      setPlannerDraft({});
+    };
+
+    const startPlanner = (goalHint?: PlanGoal) => {
+      setPlannerDraft(goalHint ? { goal: goalHint } : {});
+      setPlannerStep(goalHint ? "timeline" : "goal");
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: goalHint
+            ? "Great. How much time do you have? Reply with weeks or days (example: 12 weeks or 90 days)."
+            : [
+                "Let's build your personalized transformation plan.",
+                "Select your goal:",
+                "1) Weight Loss",
+                "2) Weight Gain",
+                "3) Body Recomposition",
+                "Reply with option number or goal name.",
+              ].join("\n"),
+        },
+      ]);
+      setSending(false);
+    };
+
+    if (plannerStep) {
+      const lower = raw.toLowerCase();
+      if (/\b(cancel|stop|exit|quit)\b/.test(lower)) {
+        finishPlanner();
+        setMessages((prev) => [...prev, { role: "assistant", content: "Planner cancelled. Say `create plan` anytime to restart." }]);
+        setSending(false);
+        return;
+      }
+
+      if (plannerStep === "goal") {
+        const goal = parseGoal(raw);
+        if (!goal) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Please choose: 1) Weight Loss, 2) Weight Gain, or 3) Body Recomposition." }]);
+          setSending(false);
+          return;
+        }
+        setPlannerDraft((prev) => ({ ...prev, goal }));
+        setPlannerStep("timeline");
+        setMessages((prev) => [...prev, { role: "assistant", content: "How much time do you have? (example: 12 weeks or 90 days)" }]);
+        setSending(false);
+        return;
+      }
+
+      if (plannerStep === "timeline") {
+        const timelineWeeks = parseTimelineWeeks(raw);
+        if (!timelineWeeks) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Please enter a valid duration (4-52 weeks), e.g., `10 weeks` or `70 days`." }]);
+          setSending(false);
+          return;
+        }
+        setPlannerDraft((prev) => ({ ...prev, timelineWeeks }));
+        setPlannerStep("age");
+        setMessages((prev) => [...prev, { role: "assistant", content: "What is your age?" }]);
+        setSending(false);
+        return;
+      }
+
+      if (plannerStep === "age") {
+        const age = parseNumberInRange(raw, 13, 80);
+        if (!age) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Please enter age between 13 and 80." }]);
+          setSending(false);
+          return;
+        }
+        setPlannerDraft((prev) => ({ ...prev, age }));
+        setPlannerStep("sex");
+        setMessages((prev) => [...prev, { role: "assistant", content: "Biological sex for calorie calculation: 1) Male  2) Female" }]);
+        setSending(false);
+        return;
+      }
+
+      if (plannerStep === "sex") {
+        const sex = parseSex(raw);
+        if (!sex) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Please reply with `1` for Male or `2` for Female." }]);
+          setSending(false);
+          return;
+        }
+        setPlannerDraft((prev) => ({ ...prev, sex }));
+        setPlannerStep("weight");
+        setMessages((prev) => [...prev, { role: "assistant", content: "Current body weight? (example: 74 kg or 163 lb)" }]);
+        setSending(false);
+        return;
+      }
+
+      if (plannerStep === "weight") {
+        const weightKg = parseWeightKg(raw);
+        if (!weightKg) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Please enter a valid weight (e.g., 74 kg or 163 lb)." }]);
+          setSending(false);
+          return;
+        }
+        setPlannerDraft((prev) => ({ ...prev, weightKg }));
+        setPlannerStep("height");
+        setMessages((prev) => [...prev, { role: "assistant", content: "Height? (example: 172 cm or 5'8)" }]);
+        setSending(false);
+        return;
+      }
+
+      if (plannerStep === "height") {
+        const heightCm = parseHeightCm(raw);
+        if (!heightCm) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Please enter a valid height (120-230 cm), e.g., 172 cm or 5'8." }]);
+          setSending(false);
+          return;
+        }
+        setPlannerDraft((prev) => ({ ...prev, heightCm }));
+        setPlannerStep("activity");
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: [
+              "Choose activity level:",
+              "1) Sedentary (little/no exercise)",
+              "2) Light (1-3 days/week)",
+              "3) Moderate (3-5 days/week)",
+              "4) Active (6-7 days/week)",
+              "5) Very active (athlete/manual labor)",
+            ].join("\n"),
+          },
+        ]);
+        setSending(false);
+        return;
+      }
+
+      if (plannerStep === "activity") {
+        const activityLevel = parseActivityLevel(raw);
+        if (!activityLevel) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Please choose activity level from 1 to 5." }]);
+          setSending(false);
+          return;
+        }
+        setPlannerDraft((prev) => ({ ...prev, activityLevel }));
+        setPlannerStep("workout_days");
+        setMessages((prev) => [...prev, { role: "assistant", content: "How many workout days per week can you commit? (3-6)" }]);
+        setSending(false);
+        return;
+      }
+
+      if (plannerStep === "workout_days") {
+        const workoutDays = parseNumberInRange(raw, 3, 6);
+        if (!workoutDays) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Please choose a number from 3 to 6." }]);
+          setSending(false);
+          return;
+        }
+        setPlannerDraft((prev) => ({ ...prev, workoutDays }));
+        setPlannerStep("diet");
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: [
+              "Choose diet style:",
+              "1) Omnivore",
+              "2) Vegetarian",
+              "3) Vegan",
+            ].join("\n"),
+          },
+        ]);
+        setSending(false);
+        return;
+      }
+
+      if (plannerStep === "diet") {
+        const dietStyle = parseDietStyle(raw);
+        if (!dietStyle) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Please choose: 1) Omnivore, 2) Vegetarian, or 3) Vegan." }]);
+          setSending(false);
+          return;
+        }
+
+        const finalProfile: PlannerProfile = {
+          goal: plannerDraft.goal ?? "recomposition",
+          timelineWeeks: plannerDraft.timelineWeeks ?? 12,
+          age: plannerDraft.age ?? 25,
+          sex: plannerDraft.sex ?? "male",
+          weightKg: plannerDraft.weightKg ?? 70,
+          heightCm: plannerDraft.heightCm ?? 170,
+          activityLevel: plannerDraft.activityLevel ?? "moderate",
+          workoutDays: plannerDraft.workoutDays ?? 4,
+          dietStyle,
+        };
+
+        const fullPlan = buildPersonalizedPlan(finalProfile);
+        finishPlanner();
+        setMessages((prev) => [...prev, { role: "assistant", content: fullPlan }]);
+        setSending(false);
+        return;
+      }
+    }
+
     const wantsSummary = /\b(show|what|summary|track|tracked|history|today)\b/i.test(raw) && /\b(activity|activities|workout|reps|progress)\b/i.test(raw);
     const wantsReset = /\b(reset|clear|delete)\b/i.test(raw) && /\b(activity|activities|history|progress)\b/i.test(raw);
     const wantsDashboardAnalysis = /\b(analyze|analysis|review|check|how am i doing|what should i do)\b/i.test(raw) && /\b(dashboard|progress|goal|goals)\b/i.test(raw);
@@ -929,6 +1344,9 @@ export function FloatingChatbot() {
     const wantsFoodTrackingHelp = /\b(how.*track.*food|how.*log.*food|track my food|log my food|nutrition tracker.*use)\b/i.test(raw);
     const wantsNutritionCoaching = /\b(nutrition|diet|macro|macros|calorie|calories|protein target|fat loss diet|muscle gain diet)\b/i.test(raw);
     const wantsWorkoutSplit = /\b(split|push pull legs|ppl|upper lower|workout split|weekly workout)\b/i.test(raw);
+    const wantsInteractivePlan =
+      /\b(plan|roadmap|program|schedule|transform|transformation|target)\b/i.test(raw) &&
+      /\b(weight loss|lose weight|fat loss|weight gain|gain weight|muscle gain|recomp|recomposition|fitness goal)\b/i.test(raw);
     const detectedActivity = parseActivityInput(raw);
     const detectedFoodLog = parseFoodLogIntent(raw);
     const foodMacroQuestion = parseFoodMacroQuestion(raw);
@@ -1098,6 +1516,12 @@ export function FloatingChatbot() {
       const plan = createTimedGoalPlan(raw);
       setMessages((prev) => [...prev, { role: "assistant", content: plan }]);
       setSending(false);
+      return;
+    }
+
+    if (wantsInteractivePlan) {
+      const goalHint = parseGoal(raw) ?? undefined;
+      startPlanner(goalHint);
       return;
     }
 
