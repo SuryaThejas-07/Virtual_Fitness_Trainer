@@ -360,9 +360,51 @@ const getCameraErrorMessage = (error: unknown): string => {
     if (error.message === "video-playback-failed") {
       return "Camera opened but video playback failed in this browser. Please open this site in Chrome or Safari and retry.";
     }
+    if (error.message === "pose-model-load-failed") {
+      return "Camera opened but AI model files failed to load. Check internet/network blockers and retry.";
+    }
+    if (error.message === "video-metadata-timeout") {
+      return "Camera opened but video stream did not initialize in time. Please retry.";
+    }
+
+    if (error.name) {
+      return `Camera startup failed (${error.name}). Please retry.`;
+    }
   }
 
   return "Camera could not be started. Check permissions and try again.";
+};
+
+const waitForVideoMetadata = (video: HTMLVideoElement, timeoutMs = 2500): Promise<void> => {
+  if (video.readyState >= 1) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const onLoaded = () => {
+      cleanup();
+      resolve();
+    };
+
+    const onError = () => {
+      cleanup();
+      reject(new Error("video-metadata-timeout"));
+    };
+
+    const timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("video-metadata-timeout"));
+    }, timeoutMs);
+
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      video.removeEventListener("loadedmetadata", onLoaded);
+      video.removeEventListener("error", onError);
+    };
+
+    video.addEventListener("loadedmetadata", onLoaded);
+    video.addEventListener("error", onError);
+  });
 };
 
 export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetectionResult {
@@ -1590,13 +1632,24 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       video.setAttribute("playsinline", "true");
       video.srcObject = stream;
 
+      await waitForVideoMetadata(video);
+
       try {
         await video.play();
       } catch {
-        throw new Error("video-playback-failed");
+        // Some mobile browsers need a second play call after metadata is available.
+        try {
+          await video.play();
+        } catch {
+          throw new Error("video-playback-failed");
+        }
       }
 
-      ensurePose();
+      try {
+        ensurePose();
+      } catch {
+        throw new Error("pose-model-load-failed");
+      }
       setCameraOn(true);
       startTimeRef.current = performance.now();
       setElapsedSeconds(0);
