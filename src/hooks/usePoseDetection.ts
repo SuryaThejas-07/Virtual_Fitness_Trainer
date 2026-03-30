@@ -320,6 +320,11 @@ const CAMERA_CONSTRAINTS: MediaStreamConstraints[] = [
   { video: true },
 ];
 
+const POSE_ASSET_BASE_URLS = [
+  "https://cdn.jsdelivr.net/npm/@mediapipe/pose",
+  "https://unpkg.com/@mediapipe/pose",
+] as const;
+
 const angleFromThreePoints = (a: { x: number; y: number; z?: number }, b: { x: number; y: number; z?: number }, c: { x: number; y: number; z?: number }): number => {
   const ab = { x: a.x - b.x, y: a.y - b.y, z: (a.z ?? 0) - (b.z ?? 0) };
   const cb = { x: c.x - b.x, y: c.y - b.y, z: (c.z ?? 0) - (b.z ?? 0) };
@@ -361,7 +366,7 @@ const getCameraErrorMessage = (error: unknown): string => {
       return "Camera opened but video playback failed in this browser. Please open this site in Chrome or Safari and retry.";
     }
     if (error.message === "pose-model-load-failed") {
-      return "Camera opened but AI model files failed to load. Check internet/network blockers and retry.";
+      return "Camera opened but AI model files failed to load. Check internet/ad blocker/firewall and retry.";
     }
     if (error.message === "video-metadata-timeout") {
       return "Camera opened but video stream did not initialize in time. Please retry.";
@@ -1564,22 +1569,40 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
     rafRef.current = requestAnimationFrame(loop);
   }, []);
 
-  const ensurePose = useCallback(() => {
+  const ensurePose = useCallback(async () => {
     if (poseRef.current) return;
 
-    const pose = new Pose({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
-    });
+    let lastError: unknown = null;
 
-    pose.setOptions({
-      modelComplexity: 1,
-      smoothLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
+    for (const baseUrl of POSE_ASSET_BASE_URLS) {
+      try {
+        const pose = new Pose({
+          locateFile: (file) => `${baseUrl}/${file}`,
+        });
 
-    pose.onResults(onPoseResults);
-    poseRef.current = pose;
+        pose.setOptions({
+          modelComplexity: 1,
+          smoothLandmarks: true,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5,
+        });
+
+        pose.onResults(onPoseResults);
+
+        // Warmup run to verify model assets are actually reachable.
+        const warmupCanvas = document.createElement("canvas");
+        warmupCanvas.width = 2;
+        warmupCanvas.height = 2;
+        await pose.send({ image: warmupCanvas });
+
+        poseRef.current = pose;
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError ?? new Error("pose-model-load-failed");
   }, [onPoseResults]);
 
   useEffect(() => {
@@ -1646,7 +1669,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       }
 
       try {
-        ensurePose();
+        await ensurePose();
       } catch {
         throw new Error("pose-model-load-failed");
       }
