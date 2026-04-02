@@ -4,31 +4,7 @@ metadata:
   name: production
 
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ai-fit-coach-config
-  namespace: production
-data:
-  VITE_API_URL: "https://api.your-domain.com"
-  NODE_ENV: "production"
 
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ai-fit-coach-secrets
-  namespace: production
-type: Opaque
-stringData:
-  FIREBASE_API_KEY: "your-firebase-api-key"
-  FIREBASE_AUTH_DOMAIN: "your-project.firebaseapp.com"
-  FIREBASE_PROJECT_ID: "your-project-id"
-  FIREBASE_STORAGE_BUCKET: "your-project.appspot.com"
-  FIREBASE_MESSAGING_SENDER_ID: "your-sender-id"
-  FIREBASE_APP_ID: "your-app-id"
-
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -36,14 +12,8 @@ metadata:
   namespace: production
   labels:
     app: ai-fit-coach
-    version: v1
 spec:
-  replicas: 3
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+  replicas: 2
   selector:
     matchLabels:
       app: ai-fit-coach
@@ -51,100 +21,59 @@ spec:
     metadata:
       labels:
         app: ai-fit-coach
-        version: v1
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "3000"
     spec:
-      serviceAccountName: ai-fit-coach
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
       containers:
       - name: ai-fit-coach
-        image: your-dockerhub-username/ai-fit-coach:latest
+        image: suryathejas/ai-fit-coach:latest
         imagePullPolicy: Always
         ports:
-        - name: http
-          containerPort: 3000
-          protocol: TCP
-        envFrom:
-        - configMapRef:
-            name: ai-fit-coach-config
-        - secretRef:
-            name: ai-fit-coach-secrets
+        - containerPort: 3000
+
+        # Environment Variables (optional)
+        env:
+        - name: NODE_ENV
+          value: "production"
+
         resources:
           requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
             memory: "256Mi"
             cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+
         livenessProbe:
           httpGet:
             path: /
-            port: http
-          initialDelaySeconds: 30
+            port: 3000
+          initialDelaySeconds: 20
           periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
+
         readinessProbe:
           httpGet:
             path: /
-            port: http
+            port: 3000
           initialDelaySeconds: 10
           periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-            - ALL
-        volumeMounts:
-        - name: tmp
-          mountPath: /tmp
-        - name: cache
-          mountPath: /app/.cache
-      volumes:
-      - name: tmp
-        emptyDir: {}
-      - name: cache
-        emptyDir: {}
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - ai-fit-coach
-              topologyKey: kubernetes.io/hostname
 
 ---
+
 apiVersion: v1
 kind: Service
 metadata:
   name: ai-fit-coach-service
   namespace: production
-  labels:
-    app: ai-fit-coach
 spec:
-  type: LoadBalancer
-  ports:
-  - port: 80
-    targetPort: http
-    protocol: TCP
-    name: http
+  type: NodePort   # Works locally (Minikube / Docker Desktop)
   selector:
     app: ai-fit-coach
+  ports:
+  - port: 80
+    targetPort: 3000
+    nodePort: 30007   # You can change this (30000–32767)
 
 ---
+
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -155,8 +84,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: ai-fit-coach
-  minReplicas: 3
-  maxReplicas: 10
+  minReplicas: 2
+  maxReplicas: 5
   metrics:
   - type: Resource
     resource:
@@ -164,65 +93,3 @@ spec:
       target:
         type: Utilization
         averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
-  behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60
-    scaleUp:
-      stabilizationWindowSeconds: 0
-      policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 15
-      - type: Pods
-        value: 2
-        periodSeconds: 15
-      selectPolicy: Max
-
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: ai-fit-coach
-  namespace: production
-
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: ai-fit-coach-netpol
-  namespace: production
-spec:
-  podSelector:
-    matchLabels:
-      app: ai-fit-coach
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: ingress-nginx
-    ports:
-    - protocol: TCP
-      port: 3000
-  egress:
-  - to:
-    - namespaceSelector: {}
-    ports:
-    - protocol: TCP
-      port: 443
-    - protocol: TCP
-      port: 53
-    - protocol: UDP
-      port: 53

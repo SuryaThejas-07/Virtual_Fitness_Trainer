@@ -1,6 +1,4 @@
-# Multi-stage build
-FROM node:18-alpine AS builder
-
+FROM node:20-alpine AS build
 WORKDIR /app
 
 # Copy package files
@@ -12,26 +10,21 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build the application
+# Build the app
 RUN npm run build
 
-# Production stage
-FROM node:18-alpine
 
-WORKDIR /app
+FROM nginx:1.27-alpine
 
-# Install serve to run the built app
-RUN npm install -g serve
+# Remove default nginx config
+RUN rm /etc/nginx/conf.d/default.conf
 
-# Copy built assets from builder stage
-COPY --from=builder /app/dist ./dist
+# Copy built files
+COPY --from=build /app/dist /usr/share/nginx/html
 
-# Expose port
-EXPOSE 3000
+# Copy custom nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+EXPOSE 80
 
-# Start the application
-CMD ["serve", "-s", "dist", "-l", "3000"]
+CMD ["nginx", "-g", "daemon off;"]

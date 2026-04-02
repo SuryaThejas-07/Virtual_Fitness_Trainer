@@ -1,141 +1,90 @@
-pipeline {
-    agent any
+pipeline {  
+    agent any  
 
-    environment {
-        REGISTRY = "docker.io"
-        IMAGE_NAME = "your-dockerhub-username/ai-fit-coach"
-        IMAGE_TAG = "${BUILD_NUMBER}"
-        DOCKER_CREDENTIALS = credentials('docker-credentials')
-        NODE_ENV = 'production'
-    }
+    environment {  
+        DOCKER_USERNAME = "suryathejas"  
+        IMAGE_NAME = "ai-fit-coach"  
+        IMAGE_TAG = "latest"  
 
-    options {
-        timestamps()
-        timeout(time: 1, unit: 'HOURS')
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-    }
+        DOCKER_PATH = "\"C:\\ProgramFiles\\Docker\\Docker\\resources\\bin\\docker.exe\""  
+        GIT_REPO = "https://github.com/SuryaThejas-07/Virtual_Fitness_Trainer.git"  
+        BRANCH = "main"  
+    }  
 
-    stages {
-        stage('Checkout') {
-            steps {
-                script {
-                    echo "Checking out code from repository..."
-                    checkout scm
-                }
-            }
-        }
+    stages {  
 
-        stage('Install Dependencies') {
-            steps {
-                script {
-                    echo "Installing Node.js dependencies..."
-                    sh 'npm ci'
-                }
-            }
-        }
+        stage('Checkout Code') {  
+            steps {  
+                git branch: "${BRANCH}",  
+                url: "${GIT_REPO}"  
+            }  
+        }  
 
-        stage('Lint') {
-            steps {
-                script {
-                    echo "Running ESLint..."
-                    sh 'npm run lint || true'
-                }
-            }
-        }
+        stage('Verify Docker') {  
+            steps {  
+                bat '%DOCKER_PATH% --version'  
+                bat '%DOCKER_PATH% info'  
+            }  
+        }  
 
-        stage('Test') {
-            steps {
-                script {
-                    echo "Running tests..."
-                    sh 'npm run test || true'
-                }
-            }
-        }
+        stage('Install Dependencies') {  
+            steps {  
+                bat 'npm ci --include=dev'  
+            }  
+        }  
 
-        stage('Build') {
-            steps {
-                script {
-                    echo "Building the application..."
-                    sh 'npm run build'
-                }
-            }
-        }
+        stage('Build App') {  
+            steps {  
+                bat 'npm run build'  
+            }  
+        }  
 
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    echo "Building Docker image..."
-                    sh '''
-                        docker build \
-                            -t ${IMAGE_NAME}:${IMAGE_TAG} \
-                            -t ${IMAGE_NAME}:latest \
-                            .
-                    '''
-                }
-            }
-        }
+        stage('Build Docker Image') {  
+            steps {  
+                bat '''  
+                %DOCKER_PATH% build -t %DOCKER_USERNAME%/%IMAGE_NAME%:%IMAGE_TAG% .  
+                '''  
+            }  
+        }  
 
-        stage('Push to Registry') {
-            when {
-                branch 'main'
-            }
-            steps {
-                script {
-                    echo "Pushing Docker image to registry..."
-                    sh '''
-                        echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
-                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                        docker push ${IMAGE_NAME}:latest
-                    '''
-                }
-            }
-        }
+        stage('List Images (Debug)') {  
+            steps {  
+                bat '%DOCKER_PATH% images'  
+            }  
+        }  
 
-        stage('Deploy to Kubernetes') {
-            when {
-                branch 'main'
-            }
-            steps {
-                script {
-                    echo "Deploying to Kubernetes..."
-                    sh '''
-                        kubectl set image deployment/ai-fit-coach \
-                            ai-fit-coach=${IMAGE_NAME}:${IMAGE_TAG} \
-                            -n production || \
-                        kubectl apply -f deployment.yml -n production
-                    '''
-                }
-            }
-        }
+        stage('Login to DockerHub') {  
+            steps {  
+                withCredentials([usernamePassword(  
+                    credentialsId: 'docker-credentials',  
+                    usernameVariable: 'DOCKER_USER',  
+                    passwordVariable: 'DOCKER_PASS'  
+                )]) {  
+                    bat '''  
+                    %DOCKER_PATH% logout  
+                    echo %DOCKER_PASS% | %DOCKER_PATH% login -u %DOCKER_USER% --password-stdin  
+                    '''  
+                }  
+            }  
+        }  
 
-        stage('Verify Deployment') {
-            when {
-                branch 'main'
-            }
-            steps {
-                script {
-                    echo "Verifying deployment..."
-                    sh '''
-                        kubectl rollout status deployment/ai-fit-coach -n production --timeout=5m
-                    '''
-                }
-            }
-        }
-    }
+        stage('Push Image') {  
+            steps {  
+                retry(3) {  
+                    bat '''  
+                    %DOCKER_PATH% push %DOCKER_USERNAME%/%IMAGE_NAME%:%IMAGE_TAG%  
+                    '''  
+                }  
+            }  
+        }  
+    }  
 
-    post {
-        always {
-            script {
-                echo "Cleaning up Docker login..."
-                sh 'docker logout'
-            }
-            cleanWs()
-        }
-        success {
-            echo "Pipeline executed successfully!"
-        }
-        failure {
-            echo "Pipeline failed. Check logs for details."
-        }
-    }
+    post {  
+        success {  
+            echo '✅ ai-fit-coach image built and pushed successfully!'  
+        }  
+        failure {  
+            echo '❌ Pipeline failed. Check Docker login / credentials.'  
+        }  
+    }  
 }
