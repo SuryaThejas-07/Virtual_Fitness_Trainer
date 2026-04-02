@@ -6,7 +6,7 @@ pipeline {
         IMAGE_NAME = "ai-fit-coach"  
         IMAGE_TAG = "latest"  
 
-        DOCKER_PATH = "\"C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe\""  
+        DOCKER_PATH = "\"C:\\ProgramFiles\\Docker\\Docker\\resources\\bin\\docker.exe\""  
         GIT_REPO = "https://github.com/SuryaThejas-07/Virtual_Fitness_Trainer.git"  
         BRANCH = "main"  
     }  
