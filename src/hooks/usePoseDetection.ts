@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
-  Pose,
   POSE_CONNECTIONS,
   type NormalizedLandmark,
   type NormalizedLandmarkList,
@@ -1617,17 +1616,47 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           diagnostics.push(`✓ window.Pose is defined (type: ${typeof (window as any).Pose})`);
         }
         
-        diagnostics.push(`🚀 Calling new Pose() constructor...`);
-        
-        const pose = new Pose({
-          locateFile: (file) => {
-            const url = `${baseUrl}/${file}`;
-            diagnostics.push(`  locateFile("${file}") → ${url}`);
-            return url;
-          },
-        });
+        diagnostics.push(`🚀 Calling Pose constructor...`);
 
-        diagnostics.push(`✓ Pose constructor succeeded`);
+        // Prefer the runtime global `window.Pose` (UMD/WASM loader). If it's not
+        // available, dynamically import the `@mediapipe/pose` module and use its
+        // exported constructor. This avoids relying on a compile-time named import
+        // which can be altered by bundlers.
+        let pose: any = null;
+        try {
+          if (typeof (window as any).Pose === "function") {
+            diagnostics.push("  Using window.Pose global constructor");
+            const GlobalCtor: any = (window as any).Pose;
+            pose = new GlobalCtor({
+              locateFile: (file: string) => {
+                const url = `${baseUrl}/${file}`;
+                diagnostics.push(`  locateFile("${file}") → ${url}`);
+                return url;
+              },
+            });
+          } else {
+            diagnostics.push("  window.Pose unavailable — dynamically importing @mediapipe/pose");
+            const mod = await import("@mediapipe/pose");
+            const ImportedCtor: any = typeof mod.Pose === "function" ? mod.Pose : (mod as any)?.default ?? (mod as any)?.Pose;
+            if (typeof ImportedCtor !== "function") {
+              throw new Error("Imported module does not expose a Pose constructor");
+            }
+
+            diagnostics.push("  Using imported Pose constructor");
+            pose = new ImportedCtor({
+              locateFile: (file: string) => {
+                const url = `${baseUrl}/${file}`;
+                diagnostics.push(`  locateFile("${file}") → ${url}`);
+                return url;
+              },
+            });
+          }
+
+          diagnostics.push(`✓ Pose constructor succeeded`);
+        } catch (ctorErr) {
+          diagnostics.push(`❌ Pose constructor failed - ${ctorErr instanceof Error ? ctorErr.message : String(ctorErr)}`);
+          throw ctorErr;
+        }
 
         pose.setOptions({
           modelComplexity: 1,

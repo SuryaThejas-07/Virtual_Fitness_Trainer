@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
       - name: ai-fit-coach
-        image: suryathejas/ai-fit-coach:latest
+        image: suryathejas/fit-coach:new
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
