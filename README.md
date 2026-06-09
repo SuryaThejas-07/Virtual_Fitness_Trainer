@@ -205,3 +205,4 @@ npm run test
 AI Fit Coach is built as a serious, long-term product vision: practical AI, strong UX, and meaningful fitness outcomes.
 
 If you are here to contribute, welcome.
+@SuryaThejas-07
