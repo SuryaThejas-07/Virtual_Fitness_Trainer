@@ -206,3 +206,4 @@ AI Fit Coach is built as a serious, long-term product vision: practical AI, stro
 
 If you are here to contribute, welcome.
 @SuryaThejas-07
+suryathejas970@gmail.com
