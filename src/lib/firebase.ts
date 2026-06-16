@@ -3,7 +3,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIza....",
+  apiKey: "AIzaSyAoryO0r1xeROAI2FBsr29-YIrkdnM1OBs",
   authDomain: "fitcoach-24d4a.firebaseapp.com",
   projectId: "fitcoach-24d4a",
   storageBucket: "fitcoach-24d4a.firebasestorage.app",
