@@ -1226,7 +1226,7 @@ function parseWeightKg(value: string): number | null {
 
 function parseHeightCm(value: string): number | null {
   const lower = value.toLowerCase();
-  const feetInches = lower.match(/(\d)\s*'?\s*(\d{1,2})\s*(?:\"|in|inch|inches)?/i);
+  const feetInches = lower.match(/(\d)\s*'?\s*(\d{1,2})\s*(?:"|in|inch|inches)?/i);
   if (feetInches && /'|ft|feet/.test(lower)) {
     const feet = Number(feetInches[1]);
     const inches = Number(feetInches[2]);

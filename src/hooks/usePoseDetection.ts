@@ -5,7 +5,56 @@ import {
   type NormalizedLandmarkList,
   type Results,
 } from "@mediapipe/pose";
-import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
+import * as drawingUtilsModule from "@mediapipe/drawing_utils";
+
+// Vite production build can resolve legacy UMD/CommonJS imports differently.
+// We implement a robust fallback strategy to retrieve drawConnectors and drawLandmarks safely.
+const getDrawingUtils = () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mod = drawingUtilsModule as any;
+  if (mod && typeof mod.drawConnectors === "function") {
+    return {
+      drawConnectors: mod.drawConnectors as typeof drawingUtilsModule.drawConnectors,
+      drawLandmarks: mod.drawLandmarks as typeof drawingUtilsModule.drawLandmarks,
+    };
+  }
+
+  if (mod && mod.default && typeof mod.default.drawConnectors === "function") {
+    return {
+      drawConnectors: mod.default.drawConnectors as typeof drawingUtilsModule.drawConnectors,
+      drawLandmarks: mod.default.drawLandmarks as typeof drawingUtilsModule.drawLandmarks,
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any;
+  if (w && typeof w.drawConnectors === "function") {
+    return {
+      drawConnectors: w.drawConnectors as typeof drawingUtilsModule.drawConnectors,
+      drawLandmarks: w.drawLandmarks as typeof drawingUtilsModule.drawLandmarks,
+    };
+  }
+
+  if (w && w.DrawingUtils) {
+    if (typeof w.DrawingUtils.drawConnectors === "function") {
+      return {
+        drawConnectors: w.DrawingUtils.drawConnectors as typeof drawingUtilsModule.drawConnectors,
+        drawLandmarks: w.DrawingUtils.drawLandmarks as typeof drawingUtilsModule.drawLandmarks,
+      };
+    }
+  }
+
+  return {
+    drawConnectors: () => {
+      console.warn("drawConnectors is not available");
+    },
+    drawLandmarks: () => {
+      console.warn("drawLandmarks is not available");
+    },
+  };
+};
+
+const { drawConnectors, drawLandmarks } = getDrawingUtils();
 
 export type ExerciseType = "Biceps Curl" | "Squat" | "Pushup" | "Lunge" | "Jumping Jack" | "Plank";
 export type DistanceStatus = "good" | "too-close" | "too-far" | "adjusting";
@@ -1493,7 +1542,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       setPostureScore(posture);
       pushFeedback(feedback);
     },
-    [evaluateExercise, pushFeedback]
+    [evaluateExercise, pushFeedback, selectedExercise]
   );
 
   const startDetectionLoop = useCallback(() => {
@@ -1571,7 +1620,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
     };
 
     rafRef.current = requestAnimationFrame(loop);
-  }, []);
+  }, [pushFeedback]);
 
   const ensurePose = useCallback(async (warmupImage?: CanvasImageSource) => {
     if (poseRef.current) return;
@@ -1579,6 +1628,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
     let lastError: unknown = null;
     let lastBaseUrl = "";
     const diagnostics: string[] = [];
+    const mpWindow = window as unknown as { Pose?: new (config: { locateFile: (file: string) => string }) => Pose };
 
     for (const baseUrl of POSE_ASSET_BASE_URLS) {
       try {
@@ -1610,10 +1660,10 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
         diagnostics.push(`📦 Checking global Pose availability...`);
         
         // Check if Pose is available before trying to instantiate
-        if (typeof (window as any).Pose === "undefined") {
+        if (typeof mpWindow.Pose === "undefined") {
           diagnostics.push("⚠️ window.Pose is undefined at this moment");
         } else {
-          diagnostics.push(`✓ window.Pose is defined (type: ${typeof (window as any).Pose})`);
+          diagnostics.push(`✓ window.Pose is defined (type: ${typeof mpWindow.Pose})`);
         }
         
         diagnostics.push(`🚀 Calling Pose constructor...`);
@@ -1622,11 +1672,11 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
         // available, dynamically import the `@mediapipe/pose` module and use its
         // exported constructor. This avoids relying on a compile-time named import
         // which can be altered by bundlers.
-        let pose: any = null;
+        let pose: Pose | null = null;
         try {
-          if (typeof (window as any).Pose === "function") {
+          if (typeof mpWindow.Pose === "function") {
             diagnostics.push("  Using window.Pose global constructor");
-            const GlobalCtor: any = (window as any).Pose;
+            const GlobalCtor = mpWindow.Pose;
             pose = new GlobalCtor({
               locateFile: (file: string) => {
                 const url = `${baseUrl}/${file}`;
@@ -1637,7 +1687,8 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           } else {
             diagnostics.push("  window.Pose unavailable — dynamically importing @mediapipe/pose");
             const mod = await import("@mediapipe/pose");
-            const ImportedCtor: any = typeof mod.Pose === "function" ? mod.Pose : (mod as any)?.default ?? (mod as any)?.Pose;
+            const rawMod = mod as unknown as { Pose?: new (config: { locateFile: (file: string) => string }) => Pose; default?: new (config: { locateFile: (file: string) => string }) => Pose };
+            const ImportedCtor = typeof rawMod.Pose === "function" ? rawMod.Pose : rawMod.default ?? rawMod.Pose;
             if (typeof ImportedCtor !== "function") {
               throw new Error("Imported module does not expose a Pose constructor");
             }
@@ -1694,9 +1745,9 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
     console.error("Pose initialization failed:", fullDiagnostics);
     
     // Check what Pose is at runtime
-    console.error("Runtime check - typeof window.Pose:", typeof (window as any).Pose);
-    if (typeof (window as any).Pose === "object") {
-      console.error("window.Pose object keys:", Object.keys((window as any).Pose || {}).slice(0, 10));
+    console.error("Runtime check - typeof window.Pose:", typeof mpWindow.Pose);
+    if (typeof mpWindow.Pose === "object") {
+      console.error("window.Pose object keys:", Object.keys(mpWindow.Pose || {}).slice(0, 10));
     }
     
     const errorMsg = 
