@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Camera, CameraOff, RotateCcw, Activity, CheckCircle2, AlertTriangle, Timer } from "lucide-react";
+import { Camera, CameraOff, RotateCcw, Activity, CheckCircle2, AlertTriangle, Timer, RefreshCw } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -170,6 +170,8 @@ export default function AITrainer() {
     startCamera,
     stopCamera,
     resetSession,
+    facingMode,
+    toggleCameraFacing,
   } = usePoseDetection(selectedExercise);
 
   const startCameraRef = useRef(startCamera);
@@ -490,6 +492,15 @@ export default function AITrainer() {
                 >
                   {cameraOn ? <CameraOff className="h-4 w-4 mr-2" /> : <Camera className="h-4 w-4 mr-2" />}
                   {cameraOn ? "Stop" : "Start Camera"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleCameraFacing}
+                  title={`Switch to ${facingMode === "user" ? "back" : "front"} camera`}
+                >
+                  <RefreshCw className="h-4 w-4 mr-1.5" />
+                  Flip Camera
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleResetSession}>
                   <RotateCcw className="h-4 w-4 mr-1" /> Reset

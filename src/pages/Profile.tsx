@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { User, Mail, Ruler, Weight, Activity, Flame, Calculator, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile, useGoals, addFirestoreDoc } from "@/hooks/useFirestore";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 
@@ -44,55 +44,51 @@ export default function Profile() {
   const { data: goalsData } = useGoals();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    name: "",
-    email: "",
+    name: user?.displayName || "",
+    email: user?.email || "",
     age: "",
     gender: "",
     height_cm: "",
     weight_kg: "",
     fitness_goal: "",
     activity_level: "",
-    bmr: "",
-    tdee: "",
-    bmi: "",
   });
 
   useEffect(() => {
     if (profile) {
       setForm({
-        name: profile.name || "",
-        email: profile.email || "",
+        name: profile.name || user?.displayName || "",
+        email: profile.email || user?.email || "",
         age: String(profile.age || ""),
         gender: profile.gender || "",
         height_cm: String(profile.height_cm || ""),
         weight_kg: String(profile.weight_kg || ""),
         fitness_goal: profile.fitness_goal || "",
         activity_level: profile.activity_level || "",
-        bmr: String(profile.bmr || ""),
-        tdee: String(profile.tdee || ""),
-        bmi: String(profile.bmi || ""),
       });
+    } else if (user) {
+      setForm((prev) => ({
+        ...prev,
+        name: prev.name || user.displayName || "",
+        email: prev.email || user.email || "",
+      }));
     }
-  }, [profile]);
+  }, [profile, user]);
 
-  // Auto-recompute BMI/BMR/TDEE whenever relevant fields change
-  useEffect(() => {
-    const computed = computeMetrics(
+  // Derived BMR, TDEE, and BMI calculated live on render
+  const computed = useMemo(() => {
+    return computeMetrics(
       Number(form.age),
       form.gender,
       Number(form.height_cm),
       Number(form.weight_kg),
       form.activity_level
     );
-    if (computed) {
-      setForm((prev) => ({
-        ...prev,
-        bmi: String(computed.bmi),
-        bmr: String(computed.bmr),
-        tdee: String(computed.tdee),
-      }));
-    }
   }, [form.age, form.gender, form.height_cm, form.weight_kg, form.activity_level]);
+
+  const bmi = computed?.bmi ?? null;
+  const bmr = computed?.bmr ?? null;
+  const tdee = computed?.tdee ?? null;
 
   const handleSave = async () => {
     if (!user) return;
@@ -101,7 +97,7 @@ export default function Profile() {
       const newWeight = Number(form.weight_kg) || 0;
       const oldWeight = profile?.weight_kg ? Number(profile.weight_kg) : 0;
 
-      await updateDoc(doc(db, "users", user.uid), {
+      await setDoc(doc(db, "users", user.uid), {
         name: form.name,
         age: Number(form.age) || 0,
         gender: form.gender,
@@ -109,65 +105,41 @@ export default function Profile() {
         weight_kg: newWeight,
         fitness_goal: form.fitness_goal,
         activity_level: form.activity_level,
-        bmr: Number(form.bmr) || 0,
-        tdee: Number(form.tdee) || 0,
-        bmi: Number(form.bmi) || 0,
-      });
+        bmr: bmr || 0,
+        tdee: tdee || 0,
+        bmi: bmi || 0,
+      }, { merge: true });
 
       // Synchronize weight changes into the body_metrics history log
       if (newWeight && newWeight !== oldWeight) {
         await addFirestoreDoc("body_metrics", user.uid, {
           weight_kg: newWeight,
-          bmi: Number(form.bmi) || null,
+          bmi: bmi || null,
           recorded_at: serverTimestamp(),
         });
       }
 
       // Calculate and save daily calorie and nutrient requirements
-      const ageVal = Number(form.age) || 0;
-      const heightVal = Number(form.height_cm) || 0;
-      const genderVal = form.gender;
-      const activityVal = form.activity_level;
-      const fitnessGoalVal = form.fitness_goal;
-      const isMale = genderVal.toLowerCase() === "male";
-
-      const bmrVal = newWeight && heightVal && ageVal
-        ? Math.round(
-            isMale
-              ? 10 * newWeight + 6.25 * heightVal - 5 * ageVal + 5
-              : 10 * newWeight + 6.25 * heightVal - 5 * ageVal - 161
-          )
-        : 0;
-
-      const multipliers: Record<string, number> = {
-        sedentary: 1.2,
-        light: 1.375,
-        moderate: 1.55,
-        active: 1.725,
-        very_active: 1.9,
-      };
-      const tdeeVal = Math.round(bmrVal * (multipliers[activityVal.toLowerCase()] ?? 1.55));
-
-      let calories = tdeeVal;
-      if (fitnessGoalVal === "fat_loss") {
-        calories = tdeeVal - 500;
-      } else if (fitnessGoalVal === "muscle_gain") {
-        calories = tdeeVal + 500;
-      } else if (fitnessGoalVal === "endurance") {
-        calories = tdeeVal + 300;
+      let calories = tdee || 2200;
+      if (form.fitness_goal === "fat_loss") {
+        calories = calories - 500;
+      } else if (form.fitness_goal === "muscle_gain") {
+        calories = calories + 500;
+      } else if (form.fitness_goal === "endurance") {
+        calories = calories + 300;
       }
       calories = Math.max(calories, 1200);
 
       let proteinMultiplier = 1.8;
-      if (fitnessGoalVal === "muscle_gain") proteinMultiplier = 2.0;
-      else if (fitnessGoalVal === "fat_loss") proteinMultiplier = 2.2;
-      else if (fitnessGoalVal === "endurance") proteinMultiplier = 1.6;
+      if (form.fitness_goal === "muscle_gain") proteinMultiplier = 2.0;
+      else if (form.fitness_goal === "fat_loss") proteinMultiplier = 2.2;
+      else if (form.fitness_goal === "endurance") proteinMultiplier = 1.6;
 
       const protein = Math.round(newWeight * proteinMultiplier) || 150;
       const fats = Math.round((calories * 0.25) / 9) || 65;
       const carbs = Math.round((calories - (protein * 4) - (fats * 9)) / 4) || 250;
 
-      if (goalsData.length > 0) {
+      if (goalsData && goalsData.length > 0) {
         await updateDoc(doc(db, "goals", goalsData[0].id), {
           daily_calories: calories,
           protein_target_g: protein,
@@ -206,9 +178,9 @@ export default function Profile() {
   }
 
   const infoCards = [
-    { label: "BMI", value: form.bmi || "--", icon: Calculator, color: "primary" },
-    { label: "BMR", value: form.bmr ? `${form.bmr} kcal` : "--", icon: Flame, color: "accent" },
-    { label: "TDEE", value: form.tdee ? `${form.tdee} kcal` : "--", icon: Activity, color: "primary" },
+    { label: "BMI", value: bmi !== null ? String(bmi) : "--", icon: Calculator, color: "primary" },
+    { label: "BMR", value: bmr !== null ? `${bmr} kcal` : "--", icon: Flame, color: "accent" },
+    { label: "TDEE", value: tdee !== null ? `${tdee} kcal` : "--", icon: Activity, color: "primary" },
   ];
 
   return (

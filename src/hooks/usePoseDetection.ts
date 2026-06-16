@@ -94,9 +94,11 @@ interface UsePoseDetectionResult {
   targetPlankTime: number;
   plankCompleted: boolean;
   setTargetPlankTime: (seconds: number) => void;
-  startCamera: () => Promise<void>;
+  startCamera: (overrideFacingMode?: "user" | "environment") => Promise<void>;
   stopCamera: () => void;
   resetSession: () => void;
+  facingMode: "user" | "environment";
+  toggleCameraFacing: () => Promise<void>;
 }
 
 const LANDMARKS = {
@@ -339,34 +341,6 @@ const applyDeadband = (
   return stabilized as NormalizedLandmarkList;
 };
 
-const CAMERA_CONSTRAINTS: MediaStreamConstraints[] = [
-  {
-    video: {
-      width: { ideal: 640 },
-      height: { ideal: 480 },
-      facingMode: "user",
-      frameRate: { ideal: 24, min: 15 },
-    },
-  },
-  {
-    video: {
-      width: { ideal: 480 },
-      height: { ideal: 360 },
-      facingMode: "user",
-      frameRate: { ideal: 20, min: 12 },
-    },
-  },
-  {
-    video: {
-      width: { ideal: 320 },
-      height: { ideal: 240 },
-      facingMode: "user",
-      frameRate: { ideal: 18, min: 10 },
-    },
-  },
-  { video: { facingMode: "user" } },
-  { video: true },
-];
 
 // Use ONLY local assets to avoid CDN version mismatches.
 // Local MediaPipe files are in public/mediapipe/pose/ and deployed with the app.
@@ -523,6 +497,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
   const plankMilestoneCountRef = useRef(0);
 
   const [cameraOn, setCameraOn] = useState(false);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [reps, setReps] = useState(0);
   const [postureScore, setPostureScore] = useState(0);
@@ -1752,7 +1727,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
     poseRef.current.onResults(onPoseResults);
   }, [onPoseResults]);
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (overrideFacingMode?: "user" | "environment") => {
     setErrorMessage(null);
 
     if (!window.isSecureContext) {
@@ -1765,10 +1740,40 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       return;
     }
 
+    const activeMode = overrideFacingMode || facingMode;
+    const constraintsList: MediaStreamConstraints[] = [
+      {
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: activeMode,
+          frameRate: { ideal: 24, min: 15 },
+        },
+      },
+      {
+        video: {
+          width: { ideal: 480 },
+          height: { ideal: 360 },
+          facingMode: activeMode,
+          frameRate: { ideal: 20, min: 12 },
+        },
+      },
+      {
+        video: {
+          width: { ideal: 320 },
+          height: { ideal: 240 },
+          facingMode: activeMode,
+          frameRate: { ideal: 18, min: 10 },
+        },
+      },
+      { video: { facingMode: activeMode } },
+      { video: true },
+    ];
+
     try {
       let stream: MediaStream | null = null;
       let lastCameraError: unknown = null;
-      for (const constraints of CAMERA_CONSTRAINTS) {
+      for (const constraints of constraintsList) {
         try {
           stream = await navigator.mediaDevices.getUserMedia(constraints);
           break;
@@ -1826,7 +1831,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       setErrorMessage(`${getCameraErrorMessage(error)}${inAppHint}`);
       stopCamera();
     }
-  }, [ensurePose, pushFeedback, startDetectionLoop, stopCamera]);
+  }, [ensurePose, pushFeedback, startDetectionLoop, stopCamera, facingMode]);
 
   useEffect(() => {
     if (!cameraOn) return;
@@ -1896,6 +1901,21 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
     };
   }, [stopCamera]);
 
+  const toggleCameraFacing = useCallback(async () => {
+    const nextMode = facingMode === "user" ? "environment" : "user";
+    setFacingMode(nextMode);
+    if (cameraOn) {
+      stopCamera();
+      setTimeout(async () => {
+        try {
+          await startCamera(nextMode);
+        } catch (err) {
+          console.error("Failed to restart camera after toggle:", err);
+        }
+      }, 300);
+    }
+  }, [facingMode, cameraOn, stopCamera, startCamera]);
+
   return {
     videoRef,
     canvasRef,
@@ -1920,5 +1940,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
     startCamera,
     stopCamera,
     resetSession,
+    facingMode,
+    toggleCameraFacing,
   };
 }

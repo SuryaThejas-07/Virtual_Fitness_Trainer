@@ -194,12 +194,12 @@ export default function WorkoutTracker() {
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Biceps Curl">💪 Biceps Curl</SelectItem>
-                  <SelectItem value="Squat">🏋️ Squat</SelectItem>
-                  <SelectItem value="Pushup">🤸 Pushup</SelectItem>
-                  <SelectItem value="Lunge">🦵 Lunge</SelectItem>
-                  <SelectItem value="Jumping Jack">⭐ Jumping Jack</SelectItem>
-                  <SelectItem value="Plank">🧘 Plank</SelectItem>
+                  <SelectItem value="Biceps Curl">Biceps Curl</SelectItem>
+                  <SelectItem value="Squat">Squat</SelectItem>
+                  <SelectItem value="Pushup">Pushup</SelectItem>
+                  <SelectItem value="Lunge">Lunge</SelectItem>
+                  <SelectItem value="Jumping Jack">Jumping Jack</SelectItem>
+                  <SelectItem value="Plank">Plank</SelectItem>
                   <SelectItem value="Other">Custom / Other</SelectItem>
                 </SelectContent>
               </Select>

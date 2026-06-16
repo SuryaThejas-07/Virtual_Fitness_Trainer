@@ -231,7 +231,6 @@ export default function ExerciseGuide() {
           >
             {/* Header */}
             <div className="bg-secondary/50 p-6 text-center border-b">
-              <span className="text-5xl mb-3 block">{exercise.image}</span>
               <h3 className="font-display font-bold text-xl">{exercise.name}</h3>
               <div className="flex items-center justify-center gap-2 mt-2">
                 <Badge variant="outline" className={difficultyColor[exercise.difficulty]}>

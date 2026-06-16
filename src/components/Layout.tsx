@@ -70,23 +70,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             <ThemeToggle />
             {user ? (
-              <div className="hidden lg:flex items-center gap-1">
+              <>
                 <Link to="/profile">
-                  <Button variant="ghost" size="sm" className="flex items-center gap-1.5">
+                  <Button variant="ghost" size="sm" className="flex items-center gap-1.5 px-2 sm:px-3">
                     <User className="h-4 w-4" />
-                    <span className="text-sm">Profile</span>
+                    <span className="text-sm hidden sm:inline">Profile</span>
                   </Button>
                 </Link>
-                <Button variant="ghost" size="sm" onClick={logout} className="flex items-center gap-1.5">
-                  <LogOut className="h-4 w-4" />
-                  <span className="text-sm">Logout</span>
-                </Button>
-              </div>
+                <div className="hidden lg:flex items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={logout} className="flex items-center gap-1.5">
+                    <LogOut className="h-4 w-4" />
+                    <span className="text-sm">Logout</span>
+                  </Button>
+                </div>
+              </>
             ) : (
-              <Link to="/login" className="hidden lg:block">
-                <Button variant="ghost" size="sm" className="flex items-center gap-1.5">
+              <Link to="/login">
+                <Button variant="ghost" size="sm" className="flex items-center gap-1.5 px-2 sm:px-3">
                   <LogIn className="h-4 w-4" />
-                  <span className="text-sm">Login</span>
+                  <span className="text-sm hidden sm:inline">Login</span>
                 </Button>
               </Link>
             )}
