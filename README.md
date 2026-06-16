@@ -2,7 +2,7 @@
 
 An AI-first fitness platform built from passion.
 
-### 🌐 Live Demo: [https://ai-fit-coach-beta.vercel.app/](https://ai-fit-coach-beta.vercel.app/)
+### 🌐 Live Demo: [https://ai-fit-coach-hc8m.vercel.app/](https://ai-fit-coach-hc8m.vercel.app/)
 
 AI Fit Coach is designed for people who want more than a workout timer. It gives real-time form feedback, tracks training and nutrition, and turns your daily effort into measurable progress.
 
