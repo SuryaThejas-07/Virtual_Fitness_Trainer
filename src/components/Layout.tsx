@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home, LayoutDashboard, Dumbbell, BookOpen, ClipboardList,
-  Apple, HeartPulse, BarChart3, Menu, X, LogIn, LogOut, User
+  Apple, HeartPulse, Menu, X, LogIn, LogOut, User
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { FloatingChatbot } from "./FloatingChatbot";
@@ -17,8 +17,7 @@ const navItems = [
   { path: "/exercises", label: "Exercises", icon: BookOpen },
   { path: "/workouts", label: "Workouts", icon: ClipboardList },
   { path: "/nutrition", label: "Nutrition", icon: Apple },
-  { path: "/health", label: "Health", icon: HeartPulse },
-  { path: "/analytics", label: "Analytics", icon: BarChart3 },
+  { path: "/health", label: "Health & Analytics", icon: HeartPulse },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

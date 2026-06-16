@@ -9,7 +9,7 @@ import {
 import { useFirestoreCollection, useGoals, useBodyMetrics } from "@/hooks/useFirestore";
 
 type TimestampLike = { toDate: () => Date };
-type DateLike = TimestampLike | Date | null | undefined;
+type DateLike = TimestampLike | Date | string | null | undefined;
 
 interface WorkoutEntry {
   id: string;
@@ -30,8 +30,22 @@ interface GoalEntry {
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+function toDate(ts: DateLike): Date | null {
+  if (!ts) return null;
+  if (ts instanceof Date) return ts;
+  if (typeof ts === "string") return new Date(ts);
+  const obj = ts as Record<string, unknown>;
+  if (obj && typeof obj.toDate === "function") {
+    return (obj.toDate as () => Date)();
+  }
+  if (obj && typeof obj.seconds === "number") {
+    return new Date(obj.seconds * 1000);
+  }
+  return null;
+}
+
 function isSameDay(ts: DateLike, ref: Date): boolean {
-  const d: Date | null = ts?.toDate?.() ?? (ts instanceof Date ? ts : null);
+  const d = toDate(ts);
   if (!d) return false;
   return (
     d.getFullYear() === ref.getFullYear() &&
@@ -61,7 +75,7 @@ export default function Dashboard() {
     weekStart.setDate(today.getDate() - today.getDay());
     weekStart.setHours(0, 0, 0, 0);
     return workouts.filter(w => {
-      const d: Date | null = w.timestamp?.toDate?.() ?? null;
+      const d = toDate(w.timestamp);
       return d !== null && d >= weekStart;
     }).length;
   }, [workouts, today]);
@@ -75,7 +89,7 @@ export default function Dashboard() {
     if (workouts.length === 0) return 0;
     const dateSet = new Set<string>();
     for (const w of workouts) {
-      const d: Date | null = w.timestamp?.toDate?.() ?? null;
+      const d = toDate(w.timestamp);
       if (d) dateSet.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
     }
     let streak = 0;
@@ -92,34 +106,42 @@ export default function Dashboard() {
     return streak;
   }, [workouts, today]);
 
-  const weeklyChartData = useMemo(() =>
-    Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(today.getDate() - (6 - i));
+  const weeklyChartData = useMemo(() => {
+    const startOfWeek = new Date(today);
+    const day = today.getDay(); // 0: Sun, 1: Mon, ..., 6: Sat
+    const diff = day === 0 ? 6 : day - 1; // Monday is the start of the week
+    startOfWeek.setDate(today.getDate() - diff);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(startOfWeek);
+      d.setDate(startOfWeek.getDate() + i);
       const dayWorkouts = workouts.filter(w => isSameDay(w.timestamp, d));
       return {
         day: DAY_LABELS[d.getDay()],
         workouts: dayWorkouts.length,
         calories: dayWorkouts.reduce((s, w) => s + (w.calories_burned || 0), 0),
       };
-    }),
-    [workouts, today]
-  );
+    });
+  }, [workouts, today]);
 
   const weightProgress = useMemo(() => {
     const sorted = [...metricsData]
       .filter(m => m.weight_kg)
       .sort((a, b) => {
-        const da = a.recorded_at?.toDate?.()?.getTime() ?? 0;
-        const db = b.recorded_at?.toDate?.()?.getTime() ?? 0;
+        const da = toDate(a.recorded_at)?.getTime() ?? 0;
+        const db = toDate(b.recorded_at)?.getTime() ?? 0;
         return da - db;
       })
       .slice(-8);
     if (sorted.length === 0) return null;
-    return sorted.map((m, i) => ({
-      week: m.recorded_at?.toDate?.()?.toLocaleDateString?.("en-US", { month: "short", day: "numeric" }) ?? `Entry ${i + 1}`,
-      weight: Number(m.weight_kg),
-    }));
+    return sorted.map((m, i) => {
+      const d = toDate(m.recorded_at);
+      return {
+        week: d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : `Entry ${i + 1}`,
+        weight: Number(m.weight_kg),
+      };
+    });
   }, [metricsData]);
 
   return (
@@ -169,7 +191,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="font-display font-semibold text-lg">Weekly Calories Burned</h3>
-              <p className="text-sm text-muted-foreground">Last 7 days</p>
+              <p className="text-sm text-muted-foreground">This week</p>
             </div>
             <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center">
               <Flame className="h-5 w-5 text-accent" />

@@ -331,14 +331,6 @@ function generateIntelligenMealSuggestions(
   goal: PlanGoal
 ): { breakfast: string; lunch: string; dinner: string; snacks: string } {
   const isBulking = goal === "weight_gain";
-  const isCutting = goal === "weight_loss";
-
-  const mealCals = {
-    breakfast: Math.round(dailyCalories * 0.25),
-    lunch: Math.round(dailyCalories * 0.35),
-    dinner: Math.round(dailyCalories * 0.3),
-    snacks: Math.round(dailyCalories * 0.1),
-  };
 
   // Omnivore breakfast options
   const breakfastOmnivore = [
@@ -837,62 +829,6 @@ function getAdvancedProteinSuggestions(totalProteinConsumed: number, proteinGoal
     "",
     "Pro tip: Pair protein with carbs post-workout for better muscle recovery!",
   ].join("\n");
-}
-
-function getNutrientAdvice(
-  totalCalories: number,
-  totalProtein: number,
-  totalCarbs: number,
-  totalFats: number,
-  goals: GoalEntry | null,
-  goal: PlanGoal
-): string {
-  const calorieGoal = goals?.daily_calories ?? 2200;
-  const proteinGoal = goals?.protein_target_g ?? 150;
-  const carbsGoal = goals?.carbs_target_g ?? 250;
-  const fatsGoal = goals?.fats_target_g ?? 65;
-
-  const calPercent = Math.round((totalCalories / calorieGoal) * 100);
-  const proteinPercent = Math.round((totalProtein / proteinGoal) * 100);
-  const carbsPercent = Math.round((totalCarbs / carbsGoal) * 100);
-  const fatsPercent = Math.round((totalFats / fatsGoal) * 100);
-
-  const lines = [
-    `📊 **Daily Macro Breakdown:**`,
-    `- Calories: ${totalCalories} / ${calorieGoal} kcal (${calPercent}%)`,
-    `- Protein: ${totalProtein.toFixed(0)}g / ${proteinGoal}g (${proteinPercent}%)`,
-    `- Carbs: ${totalCarbs.toFixed(0)}g / ${carbsGoal}g (${carbsPercent}%)`,
-    `- Fats: ${totalFats.toFixed(0)}g / ${fatsGoal}g (${fatsPercent}%)`,
-    "",
-  ];
-
-  if (goal === "weight_loss") {
-    if (calPercent < 85) {
-      lines.push("💚 Calories are under target - you can add more food for sustainability.");
-    } else if (calPercent > 110) {
-      lines.push("⚠️ Calories exceeded - prioritize protein, reduce high-fat snacks tomorrow.");
-    } else {
-      lines.push("✅ Calories are on track for your fat loss goal!");
-    }
-  } else if (goal === "weight_gain") {
-    if (calPercent < 90) {
-      lines.push("📈 Need more calories! Add bulking meals: rice, pasta, peanut butter, oily fish.");
-    } else {
-      lines.push("✅ Calories are good for muscle gain!");
-    }
-  }
-
-  if (proteinPercent < 85) {
-    lines.push(`💪 Add ${Math.round(proteinGoal - totalProtein)}g more protein today.`);
-  } else if (proteinPercent >= 100) {
-    lines.push("✅ Protein target hit - excellent work!");
-  }
-
-  if (carbsPercent < 70 && goal === "weight_gain") {
-    lines.push("🍚 Add more carbs for energy and performance!");
-  }
-
-  return lines.join("\n");
 }
 
 function getDashboardCoachAdvice(params: {

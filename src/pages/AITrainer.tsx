@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Camera, CameraOff, RotateCcw, Activity, CheckCircle2, AlertTriangle, Timer } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import trainerAvatar from "@/assets/trainer-avatar.png";
@@ -124,12 +125,27 @@ const formatTime = (seconds: number): string => {
 export default function AITrainer() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const location = useLocation();
   const [selectedExercise, setSelectedExercise] = useState<ExerciseType>("Squat");
   const previousCameraOnRef = useRef(false);
   const [savingWorkoutLog, setSavingWorkoutLog] = useState(false);
   const [targetReps, setTargetReps] = useState(10);
   const [targetSets, setTargetSets] = useState(3);
   const [hasLoggedCurrentTarget, setHasLoggedCurrentTarget] = useState(false);
+  const [hasProcessedState, setHasProcessedState] = useState(false);
+
+  // Read passed exercise state from exercise guide link
+  useEffect(() => {
+    if (hasProcessedState) return;
+    const state = location.state as { exercise?: string; autoStart?: boolean } | null;
+    if (state?.exercise) {
+      const matched = exercises.find((e) => e.toLowerCase() === state.exercise?.toLowerCase());
+      if (matched) {
+        setSelectedExercise(matched);
+      }
+    }
+    setHasProcessedState(true);
+  }, [location.state, hasProcessedState]);
 
   const {
     videoRef,
@@ -155,6 +171,13 @@ export default function AITrainer() {
     stopCamera,
     resetSession,
   } = usePoseDetection(selectedExercise);
+
+  const startCameraRef = useRef(startCamera);
+  useEffect(() => {
+    startCameraRef.current = startCamera;
+  }, [startCamera]);
+
+  const didAutoStartRef = useRef(false);
 
   const isPlank = selectedExercise === "Plank";
   const plankProgress = useMemo(() => {
@@ -227,6 +250,19 @@ export default function AITrainer() {
     }
     setHasLoggedCurrentTarget(false);
   }, [selectedExercise]);
+
+  // Auto-start camera if flag is present and selected exercise is set
+  useEffect(() => {
+    if (!hasProcessedState) return;
+    const state = location.state as { exercise?: string; autoStart?: boolean } | null;
+    if (state?.autoStart && !cameraOn && !didAutoStartRef.current) {
+      didAutoStartRef.current = true;
+      const timer = setTimeout(() => {
+        startCameraRef.current().catch((err) => console.error("Auto-start camera failed:", err));
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [hasProcessedState, location.state, cameraOn]);
 
   useEffect(() => {
     const justStopped = previousCameraOnRef.current && !cameraOn;

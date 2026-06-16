@@ -13,7 +13,6 @@ import ExerciseGuide from "./pages/ExerciseGuide";
 import WorkoutTracker from "./pages/WorkoutTracker";
 import NutritionTracker from "./pages/NutritionTracker";
 import HealthMonitoring from "./pages/HealthMonitoring";
-import ProgressAnalytics from "./pages/ProgressAnalytics";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Profile from "./pages/Profile";
@@ -54,7 +53,7 @@ const App = () => (
                 <Route path="/workouts" element={<ProtectedRoute><WorkoutTracker /></ProtectedRoute>} />
                 <Route path="/nutrition" element={<ProtectedRoute><NutritionTracker /></ProtectedRoute>} />
                 <Route path="/health" element={<ProtectedRoute><HealthMonitoring /></ProtectedRoute>} />
-                <Route path="/analytics" element={<ProtectedRoute><ProgressAnalytics /></ProtectedRoute>} />
+                <Route path="/analytics" element={<Navigate to="/health" replace />} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

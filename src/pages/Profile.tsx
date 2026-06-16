@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { User, Mail, Ruler, Weight, Target, Activity, Flame, Calculator, Save } from "lucide-react";
+import { User, Mail, Ruler, Weight, Activity, Flame, Calculator, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
-import { useUserProfile } from "@/hooks/useFirestore";
-import { doc, updateDoc } from "firebase/firestore";
+import { useUserProfile, useGoals, addFirestoreDoc } from "@/hooks/useFirestore";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 
@@ -41,6 +41,7 @@ function computeMetrics(
 export default function Profile() {
   const { user } = useAuth();
   const { profile, loading } = useUserProfile();
+  const { data: goalsData } = useGoals();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -97,18 +98,100 @@ export default function Profile() {
     if (!user) return;
     setSaving(true);
     try {
+      const newWeight = Number(form.weight_kg) || 0;
+      const oldWeight = profile?.weight_kg ? Number(profile.weight_kg) : 0;
+
       await updateDoc(doc(db, "users", user.uid), {
         name: form.name,
         age: Number(form.age) || 0,
         gender: form.gender,
         height_cm: Number(form.height_cm) || 0,
-        weight_kg: Number(form.weight_kg) || 0,
+        weight_kg: newWeight,
         fitness_goal: form.fitness_goal,
         activity_level: form.activity_level,
         bmr: Number(form.bmr) || 0,
         tdee: Number(form.tdee) || 0,
         bmi: Number(form.bmi) || 0,
       });
+
+      // Synchronize weight changes into the body_metrics history log
+      if (newWeight && newWeight !== oldWeight) {
+        await addFirestoreDoc("body_metrics", user.uid, {
+          weight_kg: newWeight,
+          bmi: Number(form.bmi) || null,
+          recorded_at: serverTimestamp(),
+        });
+      }
+
+      // Calculate and save daily calorie and nutrient requirements
+      const ageVal = Number(form.age) || 0;
+      const heightVal = Number(form.height_cm) || 0;
+      const genderVal = form.gender;
+      const activityVal = form.activity_level;
+      const fitnessGoalVal = form.fitness_goal;
+      const isMale = genderVal.toLowerCase() === "male";
+
+      const bmrVal = newWeight && heightVal && ageVal
+        ? Math.round(
+            isMale
+              ? 10 * newWeight + 6.25 * heightVal - 5 * ageVal + 5
+              : 10 * newWeight + 6.25 * heightVal - 5 * ageVal - 161
+          )
+        : 0;
+
+      const multipliers: Record<string, number> = {
+        sedentary: 1.2,
+        light: 1.375,
+        moderate: 1.55,
+        active: 1.725,
+        very_active: 1.9,
+      };
+      const tdeeVal = Math.round(bmrVal * (multipliers[activityVal.toLowerCase()] ?? 1.55));
+
+      let calories = tdeeVal;
+      if (fitnessGoalVal === "fat_loss") {
+        calories = tdeeVal - 500;
+      } else if (fitnessGoalVal === "muscle_gain") {
+        calories = tdeeVal + 500;
+      } else if (fitnessGoalVal === "endurance") {
+        calories = tdeeVal + 300;
+      }
+      calories = Math.max(calories, 1200);
+
+      let proteinMultiplier = 1.8;
+      if (fitnessGoalVal === "muscle_gain") proteinMultiplier = 2.0;
+      else if (fitnessGoalVal === "fat_loss") proteinMultiplier = 2.2;
+      else if (fitnessGoalVal === "endurance") proteinMultiplier = 1.6;
+
+      const protein = Math.round(newWeight * proteinMultiplier) || 150;
+      const fats = Math.round((calories * 0.25) / 9) || 65;
+      const carbs = Math.round((calories - (protein * 4) - (fats * 9)) / 4) || 250;
+
+      if (goalsData.length > 0) {
+        await updateDoc(doc(db, "goals", goalsData[0].id), {
+          daily_calories: calories,
+          protein_target_g: protein,
+          carbs_target_g: carbs,
+          fats_target_g: fats,
+        });
+        const localKey = `fitcoach_${user.uid}_goals`;
+        const updatedGoal = {
+          ...goalsData[0],
+          daily_calories: calories,
+          protein_target_g: protein,
+          carbs_target_g: carbs,
+          fats_target_g: fats,
+        };
+        localStorage.setItem(localKey, JSON.stringify([updatedGoal]));
+      } else {
+        await addFirestoreDoc("goals", user.uid, {
+          daily_calories: calories,
+          protein_target_g: protein,
+          carbs_target_g: carbs,
+          fats_target_g: fats,
+        });
+      }
+
       toast({ title: "Profile updated", description: "Your changes have been saved." });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unexpected error";

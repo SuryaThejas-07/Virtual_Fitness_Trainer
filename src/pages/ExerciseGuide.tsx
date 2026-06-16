@@ -271,7 +271,7 @@ export default function ExerciseGuide() {
                 >
                   <Play className="h-4 w-4 mr-1" /> View Demo
                 </Button>
-                <Link to="/ai-trainer" className="flex-1" onClick={(e) => e.stopPropagation()}>
+                <Link to="/ai-trainer" state={{ exercise: exercise.name, autoStart: true }} className="flex-1" onClick={(e) => e.stopPropagation()}>
                   <Button className="w-full bg-gradient-primary text-primary-foreground" size="sm">
                     <Dumbbell className="h-4 w-4 mr-2" />
                     Start AI Trainer
@@ -448,7 +448,7 @@ export default function ExerciseGuide() {
                   </div>
 
                   {/* CTA */}
-                  <Link to="/ai-trainer">
+                  <Link to="/ai-trainer" state={{ exercise: selectedExercise.name, autoStart: true }}>
                     <Button className="w-full h-12 bg-gradient-primary text-primary-foreground text-base font-semibold rounded-xl shadow-card hover:shadow-card-hover transition-all">
                       <Dumbbell className="h-5 w-5 mr-2" />
                       Start AI Trainer — {selectedExercise.name}

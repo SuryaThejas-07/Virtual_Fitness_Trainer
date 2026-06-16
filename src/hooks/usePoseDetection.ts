@@ -795,7 +795,6 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           }
 
           if (squatCandidateFramesRef.current >= 2) {
-            const prevState = squatPhaseRef.current;
             squatPhaseRef.current = nextCandidateState;
             squatCandidateStateRef.current = null;
             squatCandidateFramesRef.current = 0;
@@ -930,7 +929,6 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           }
 
           if (pushupCandidateFramesRef.current >= 2) {
-            const prevPushState = pushupPhaseRef.current;
             pushupPhaseRef.current = nextPushCandidate;
             pushupCandidateStateRef.current = null;
             pushupCandidateFramesRef.current = 0;
@@ -1047,7 +1045,6 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           }
 
           if (curlCandidateFramesRef.current >= 2) {
-            const prevCurlState = curlPhaseRef.current;
             curlPhaseRef.current = nextCurlCandidate;
             curlCandidateStateRef.current = null;
             curlCandidateFramesRef.current = 0;
@@ -1175,7 +1172,6 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           }
 
           if (lungeCandidateFramesRef.current >= 2) {
-            const prevLungeState = lungePhaseRef.current;
             lungePhaseRef.current = nextLungeCandidate;
             lungeCandidateStateRef.current = null;
             lungeCandidateFramesRef.current = 0;
@@ -1273,7 +1269,6 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           }
 
           if (jackCandidateFramesRef.current >= 2) {
-            const prevJackState = jackPhaseRef.current;
             jackPhaseRef.current = nextJackCandidate;
             jackCandidateStateRef.current = null;
             jackCandidateFramesRef.current = 0;
@@ -1625,14 +1620,11 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
   const ensurePose = useCallback(async (warmupImage?: CanvasImageSource) => {
     if (poseRef.current) return;
 
-    let lastError: unknown = null;
-    let lastBaseUrl = "";
     const diagnostics: string[] = [];
     const mpWindow = window as unknown as { Pose?: new (config: { locateFile: (file: string) => string }) => Pose };
 
     for (const baseUrl of POSE_ASSET_BASE_URLS) {
       try {
-        lastBaseUrl = baseUrl;
         diagnostics.push(`\n📍 Trying: ${baseUrl}`);
         
         // Pre-check: verify critical assets exist before instantiating Pose
@@ -1729,7 +1721,6 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
         console.log("✅ Pose initialized successfully:", diagnostics.join("\n"));
         return;
       } catch (error) {
-        lastError = error;
         const errMsg = error instanceof Error ? error.message : String(error);
         const errName = error instanceof Error ? error.name : "Unknown";
         diagnostics.push(`❌ Error (${errName}): ${errMsg}`);
