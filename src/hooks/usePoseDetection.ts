@@ -307,7 +307,8 @@ const hasExerciseVisibility = (exercise: ExerciseType, lms: NormalizedLandmarkLi
 
 const getDistanceStatus = (
   exercise: ExerciseType,
-  landmarks: NormalizedLandmarkList
+  landmarks: NormalizedLandmarkList,
+  aspectRatio = 1.777
 ): { status: DistanceStatus; hint: string } => {
   const tracked =
     exercise === "Biceps Curl"
@@ -349,19 +350,39 @@ const getDistanceStatus = (
     };
   }
 
+  const xs = tracked.map((lm) => lm.x * aspectRatio);
   const ys = tracked.map((lm) => lm.y);
-  const bodyHeight = Math.max(...ys) - Math.min(...ys);
 
-  const tooCloseThreshold =
-    exercise === "Biceps Curl" ? 0.76 : exercise === "Pushup" || exercise === "Plank" ? 0.9 : 0.86;
-  const tooFarThreshold =
-    exercise === "Biceps Curl" ? 0.32 : exercise === "Pushup" || exercise === "Plank" ? 0.34 : 0.46;
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
 
-  if (bodyHeight > tooCloseThreshold) {
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+
+  const isHorizontal = exercise === "Pushup" || exercise === "Plank" || exercise === "Lunge";
+  const bodySpan = isHorizontal ? spanX : spanY;
+
+  let tooCloseThreshold = 0.86;
+  let tooFarThreshold = 0.38;
+
+  if (exercise === "Biceps Curl") {
+    tooCloseThreshold = 0.76;
+    tooFarThreshold = 0.32;
+  } else if (exercise === "Pushup" || exercise === "Plank") {
+    tooCloseThreshold = 0.86 * aspectRatio;
+    tooFarThreshold = 0.36 * aspectRatio;
+  } else if (exercise === "Lunge") {
+    tooCloseThreshold = 0.86 * aspectRatio;
+    tooFarThreshold = 0.44 * aspectRatio;
+  }
+
+  if (bodySpan > tooCloseThreshold) {
     return { status: "too-close", hint: "You are too close. Step back slightly." };
   }
 
-  if (bodyHeight < tooFarThreshold) {
+  if (bodySpan < tooFarThreshold) {
     return { status: "too-far", hint: "You are too far. Move a bit closer." };
   }
 
@@ -429,9 +450,27 @@ const POSE_ASSET_BASE_URLS = [
   "/mediapipe/pose",
 ] as const;
 
-const angleFromThreePoints = (a: { x: number; y: number; z?: number }, b: { x: number; y: number; z?: number }, c: { x: number; y: number; z?: number }): number => {
-  const ab = { x: a.x - b.x, y: a.y - b.y, z: (a.z ?? 0) - (b.z ?? 0) };
-  const cb = { x: c.x - b.x, y: c.y - b.y, z: (c.z ?? 0) - (b.z ?? 0) };
+const angleFromThreePoints = (
+  a: { x: number; y: number; z?: number },
+  b: { x: number; y: number; z?: number },
+  c: { x: number; y: number; z?: number },
+  aspectRatio = 1.777
+): number => {
+  const scaleX = aspectRatio / 1.777;
+  const ax = a.x * scaleX;
+  const ay = a.y;
+  const az = (a.z ?? 0) * scaleX;
+
+  const bx = b.x * scaleX;
+  const by = b.y;
+  const bz = (b.z ?? 0) * scaleX;
+
+  const cx = c.x * scaleX;
+  const cy = c.y;
+  const cz = (c.z ?? 0) * scaleX;
+
+  const ab = { x: ax - bx, y: ay - by, z: az - bz };
+  const cb = { x: cx - bx, y: cy - by, z: cz - bz };
 
   const dot = ab.x * cb.x + ab.y * cb.y + ab.z * cb.z;
   const abMag = Math.sqrt(ab.x * ab.x + ab.y * ab.y + ab.z * ab.z);
@@ -772,10 +811,18 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       const lAnkle = landmarks[LANDMARKS.leftAnkle];
       const rAnkle = landmarks[LANDMARKS.rightAnkle];
 
-      const leftKneeAngleRaw = angleFromThreePoints(lHip, lKnee, lAnkle);
-      const rightKneeAngleRaw = angleFromThreePoints(rHip, rKnee, rAnkle);
-      const leftElbowAngleRaw = angleFromThreePoints(lShoulder, lElbow, lWrist);
-      const rightElbowAngleRaw = angleFromThreePoints(rShoulder, rElbow, rWrist);
+      const video = videoRef.current;
+      const width = video?.videoWidth || 1280;
+      const height = video?.videoHeight || 720;
+      const aspectRatio = width / height;
+      const dy = (Math.abs(lHip.y - lShoulder.y) + Math.abs(rHip.y - rShoulder.y)) / 2;
+      const dx = ((Math.abs(lHip.x - lShoulder.x) + Math.abs(rHip.x - rShoulder.x)) / 2) * (aspectRatio / 1.777);
+      const isVerticalTorso = dy > dx * 0.85;
+
+      const leftKneeAngleRaw = angleFromThreePoints(lHip, lKnee, lAnkle, aspectRatio);
+      const rightKneeAngleRaw = angleFromThreePoints(rHip, rKnee, rAnkle, aspectRatio);
+      const leftElbowAngleRaw = angleFromThreePoints(lShoulder, lElbow, lWrist, aspectRatio);
+      const rightElbowAngleRaw = angleFromThreePoints(rShoulder, rElbow, rWrist, aspectRatio);
 
       const leftLegVis = (lHip.visibility ?? 0) + (lKnee.visibility ?? 0) + (lAnkle.visibility ?? 0);
       const rightLegVis = (rHip.visibility ?? 0) + (rKnee.visibility ?? 0) + (rAnkle.visibility ?? 0);
@@ -797,7 +844,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           : (leftElbowAngleRaw + rightElbowAngleRaw) / 2;
 
       const backRaw =
-        (angleFromThreePoints(lShoulder, lHip, lKnee) + angleFromThreePoints(rShoulder, rHip, rKnee)) / 2;
+        (angleFromThreePoints(lShoulder, lHip, lKnee, aspectRatio) + angleFromThreePoints(rShoulder, rHip, rKnee, aspectRatio)) / 2;
 
       smoothedAnglesRef.current.knee = smoothValue(smoothedAnglesRef.current.knee, kneeRaw);
       smoothedAnglesRef.current.elbow = smoothValue(smoothedAnglesRef.current.elbow, elbowRaw);
@@ -817,9 +864,13 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       });
 
       const kneeAlignmentDelta =
-        (Math.abs(lKnee.x - lAnkle.x) + Math.abs(rKnee.x - rAnkle.x)) / 2;
+        ((Math.abs(lKnee.x - lAnkle.x) + Math.abs(rKnee.x - rAnkle.x)) / 2) * (aspectRatio / 1.777);
 
       if (selectedExercise === "Squat") {
+        if (!isVerticalTorso) {
+          commitChecks("squat:standing", []);
+          return { feedback: { text: "Please stand up to perform squats.", type: "warning" }, posture: 0 };
+        }
         const depthScore = scoreInRange(avgKneeAngle, 85, 125, 50);
         const backScore = scoreFromRange(backAngle, 155, 55);
         const kneeAlignmentScore = clamp(100 - (kneeAlignmentDelta / 0.24) * 100, 0, 100);
@@ -864,14 +915,14 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           squatCandidateFramesRef.current = 0;
         }
 
-        // Stricter squat depth gate: only count deep squats.
-        if (avgKneeAngle <= 110) {
+        // Lenient squat depth gate: count the rep if knee angle goes below 130 degrees.
+        if (avgKneeAngle <= 130) {
           squatDepthReachedRef.current = true;
         }
 
         if (
           squatDepthReachedRef.current &&
-          avgKneeAngle >= 155 &&
+          avgKneeAngle >= 145 &&
           Date.now() - repLastCountTsRef.current > 400
         ) {
           if (IS_DEV) console.debug("[PoseDebug] Squat rep trigger", {
@@ -945,17 +996,59 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           },
         ]);
 
-        if (backScore < 50) return { feedback: { text: "Keep your back straighter during the squat.", type: "warning" }, posture };
-        if (depthScore < 50) return { feedback: { text: "Lower your hips slightly for a deeper squat.", type: "warning" }, posture };
-        if (kneeAlignmentScore < 50) return { feedback: { text: "Keep knees aligned over your ankles.", type: "warning" }, posture };
-        return { feedback: { text: "Form looks good. Complete full squat range to count a rep.", type: "success" }, posture };
+        let feedbackText = "Form looks good. Complete full squat range to count a rep.";
+        let feedbackType: FeedbackType = "success";
+
+        if (squatPhaseRef.current === "standing") {
+          if (avgKneeAngle < 145) {
+            feedbackText = "Stand up straight to begin the squat.";
+            feedbackType = "warning";
+          } else if (backAngle < 145) {
+            feedbackText = "Keep your back straighter while standing.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Ready to start. Squat down with controlled form.";
+          }
+        } else if (squatPhaseRef.current === "descending") {
+          if (backAngle < 140) {
+            feedbackText = "Keep your back straight as you lower.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Lowering... Go down until your thighs are parallel to the floor.";
+          }
+        } else if (squatPhaseRef.current === "bottom") {
+          if (avgKneeAngle > 130) {
+            feedbackText = "Go slightly deeper to reach the bottom.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Good depth! Now push through your heels to stand up.";
+          }
+        } else if (squatPhaseRef.current === "ascending") {
+          if (backAngle < 140) {
+            feedbackText = "Keep your back straight as you rise.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Rising... Stand up fully to complete the rep.";
+          }
+        }
+
+        if (kneeAlignmentScore < 50 && feedbackType === "success") {
+          feedbackText = "Keep knees aligned over your ankles.";
+          feedbackType = "warning";
+        }
+
+        return { feedback: { text: feedbackText, type: feedbackType }, posture };
       }
 
       if (selectedExercise === "Pushup") {
+        if (isVerticalTorso) {
+          commitChecks("pushup:up", []);
+          return { feedback: { text: "Get into horizontal floor pushup position. Standing posture does not count.", type: "warning" }, posture: 0 };
+        }
         const leftFootPoint = preferVisiblePoint(lAnkle, lKnee);
         const rightFootPoint = preferVisiblePoint(rAnkle, rKnee);
         const plankLineRaw =
-          (angleFromThreePoints(lShoulder, lHip, leftFootPoint) + angleFromThreePoints(rShoulder, rHip, rightFootPoint)) / 2;
+          (angleFromThreePoints(lShoulder, lHip, leftFootPoint, aspectRatio) + angleFromThreePoints(rShoulder, rHip, rightFootPoint, aspectRatio)) / 2;
         smoothedAnglesRef.current.plank = smoothValue(smoothedAnglesRef.current.plank, plankLineRaw);
         const plankLineAngle = smoothedAnglesRef.current.plank;
         const lineScore = scoreInRange(plankLineAngle, 150, 180, 35);
@@ -998,13 +1091,14 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           pushupCandidateFramesRef.current = 0;
         }
 
-        if (avgElbowAngle <= 125) {
+        // Lenient pushup depth gate: count the rep if elbow angle goes below 140 degrees.
+        if (avgElbowAngle <= 140) {
           pushupDepthReachedRef.current = true;
         }
 
         if (
           pushupDepthReachedRef.current &&
-          avgElbowAngle >= 155 &&
+          avgElbowAngle >= 145 &&
           Date.now() - repLastCountTsRef.current > 400
         ) {
           if (IS_DEV) console.debug("[PoseDebug] Pushup rep trigger", {
@@ -1052,13 +1146,51 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           },
         ]);
 
-        if (lineScore < 65) return { feedback: { text: "Keep your back straight in a plank line.", type: "warning" }, posture };
-        if (elbowDepthScore < 55) return { feedback: { text: "Go slightly deeper for a complete pushup.", type: "warning" }, posture };
-        return { feedback: { text: "Form looks good. Complete full pushup range to count a rep.", type: "success" }, posture };
+        let feedbackText = "Form looks good. Complete full pushup range to count a rep.";
+        let feedbackType: FeedbackType = "success";
+
+        if (pushupPhaseRef.current === "up") {
+          if (avgElbowAngle < 145) {
+            feedbackText = "Extend your arms fully to start the pushup.";
+            feedbackType = "warning";
+          } else if (lineScore < 65) {
+            feedbackText = "Straighten your body into a plank line.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Ready to start. Lower your chest to the floor.";
+          }
+        } else if (pushupPhaseRef.current === "descending") {
+          if (lineScore < 60) {
+            feedbackText = "Keep your hips aligned. Don't sag your back.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Lowering... Keep elbows controlled.";
+          }
+        } else if (pushupPhaseRef.current === "bottom") {
+          if (avgElbowAngle > 140) {
+            feedbackText = "Go slightly lower for a complete pushup.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Great depth! Push back up to lock out.";
+          }
+        } else if (pushupPhaseRef.current === "rising") {
+          if (lineScore < 60) {
+            feedbackText = "Keep your body straight as you push up.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Pushing up... Extend arms fully.";
+          }
+        }
+
+        return { feedback: { text: feedbackText, type: feedbackType }, posture };
       }
 
       if (selectedExercise === "Biceps Curl") {
-        const armPathDelta = (Math.abs(lShoulder.x - lElbow.x) + Math.abs(rShoulder.x - rElbow.x)) / 2;
+        if (!isVerticalTorso) {
+          commitChecks("curl:down", []);
+          return { feedback: { text: "Please stand up to perform biceps curls.", type: "warning" }, posture: 0 };
+        }
+        const armPathDelta = ((Math.abs(lShoulder.x - lElbow.x) + Math.abs(rShoulder.x - rElbow.x)) / 2) * (aspectRatio / 1.777);
         const elbowTuckScore = clamp(100 - (armPathDelta / 0.14) * 100, 0, 100);
         const rangeScore = scoreInRange(avgElbowAngle, 70, 125, 70);
         const posture = Math.round(elbowTuckScore * 0.55 + rangeScore * 0.45);
@@ -1114,8 +1246,8 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           curlCandidateFramesRef.current = 0;
         }
 
-        // Require a meaningful contraction before permitting a curl rep.
-        if (avgElbowAngle <= 120) {
+        // Lenient curl contraction gate: count the rep if elbow angle goes below 135 degrees.
+        if (avgElbowAngle <= 135) {
           curlContractionReachedRef.current = true;
         }
 
@@ -1123,10 +1255,12 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           curlTopReachedRef.current = true;
         }
 
+        const extensionTrigger = Math.max(adaptiveCurlTop + 15, adaptiveCurlBottom - 18);
+
         if (
           curlTopReachedRef.current &&
           curlContractionReachedRef.current &&
-          curlMotionAngle >= adaptiveCurlBottom - 5 &&
+          curlMotionAngle >= extensionTrigger &&
           Date.now() - repLastCountTsRef.current > 400
         ) {
           if (IS_DEV) console.debug("[PoseDebug] Curl rep trigger", {
@@ -1191,12 +1325,50 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           },
         ]);
 
-        if (elbowTuckScore < 60) return { feedback: { text: "Keep your elbows tucked near your torso.", type: "warning" }, posture };
-        if (rangeScore < 60) return { feedback: { text: "Use full curl range: squeeze up, extend down.", type: "warning" }, posture };
-        return { feedback: { text: "Form looks good. Complete full curl range to count a rep.", type: "success" }, posture };
+        let feedbackText = "Form looks good. Complete full curl range to count a rep.";
+        let feedbackType: FeedbackType = "success";
+
+        if (curlPhaseRef.current === "down") {
+          if (avgElbowAngle < 140) {
+            feedbackText = "Extend your arms fully down to start.";
+            feedbackType = "warning";
+          } else if (elbowTuckScore < 60) {
+            feedbackText = "Tuck your elbows close to your torso.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Ready to start. Curl the weight up.";
+          }
+        } else if (curlPhaseRef.current === "curling") {
+          if (elbowTuckScore < 50) {
+            feedbackText = "Keep your elbows tucked as you curl.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Squeeze your biceps and curl up.";
+          }
+        } else if (curlPhaseRef.current === "top") {
+          if (avgElbowAngle > 115) {
+            feedbackText = "Squeeze tighter at the top.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Top reached! Lower down with control.";
+          }
+        } else if (curlPhaseRef.current === "lowering") {
+          if (elbowTuckScore < 50) {
+            feedbackText = "Keep elbows tucked as you lower.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Lowering slowly... Extend your arms fully.";
+          }
+        }
+
+        return { feedback: { text: feedbackText, type: feedbackType }, posture };
       }
 
       if (selectedExercise === "Lunge") {
+        if (!isVerticalTorso) {
+          commitChecks("lunge:standing", []);
+          return { feedback: { text: "Please stand up to perform lunges.", type: "warning" }, posture: 0 };
+        }
         const leftLungeDepth = scoreInRange(leftKneeAngleRaw, 75, 110, 35);
         const rightLungeDepth = scoreInRange(rightKneeAngleRaw, 75, 110, 35);
         const depthScore = Math.max(leftLungeDepth, rightLungeDepth);
@@ -1208,15 +1380,15 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
         const currentLungeState = lungePhaseRef.current;
         let nextLungeCandidate: typeof currentLungeState | null = null;
         if (currentLungeState === "standing") {
-          if (lungeKnee < 160) nextLungeCandidate = "descending";
+          if (lungeKnee < 150) nextLungeCandidate = "descending";
         } else if (currentLungeState === "descending") {
-          if (lungeKnee <= 135) nextLungeCandidate = "bottom";
-          else if (lungeKnee > 170) nextLungeCandidate = "standing";
+          if (lungeKnee <= 140) nextLungeCandidate = "bottom";
+          else if (lungeKnee > 155) nextLungeCandidate = "standing";
         } else if (currentLungeState === "bottom") {
           if (lungeKnee > 145) nextLungeCandidate = "rising";
         } else if (currentLungeState === "rising") {
-          if (lungeKnee > 166) nextLungeCandidate = "standing";
-          else if (lungeKnee < 135) nextLungeCandidate = "bottom";
+          if (lungeKnee > 155) nextLungeCandidate = "standing";
+          else if (lungeKnee < 140) nextLungeCandidate = "bottom";
         }
 
         if (nextLungeCandidate && nextLungeCandidate !== currentLungeState) {
@@ -1241,13 +1413,14 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           lungeCandidateFramesRef.current = 0;
         }
 
-        if (lungeKnee <= 145) {
+        // Lenient lunge depth gate: count the rep if knee angle goes below 140 degrees.
+        if (lungeKnee <= 140) {
           lungeDepthReachedRef.current = true;
         }
 
         if (
           lungeDepthReachedRef.current &&
-          lungeKnee >= 150 &&
+          lungeKnee >= 155 &&
           Date.now() - repLastCountTsRef.current > 400
         ) {
           if (IS_DEV) console.debug("[PoseDebug] Lunge rep trigger", {
@@ -1272,8 +1445,8 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           {
             label: "Return to stand",
             current: `${lungeKnee.toFixed(1)}°`,
-            threshold: ">= 150°",
-            pass: lungeKnee >= 150,
+            threshold: ">= 155°",
+            pass: lungeKnee >= 155,
           },
           {
             label: "Torso/back angle",
@@ -1295,14 +1468,52 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           },
         ]);
 
-        if (depthScore < 60) return { feedback: { text: "Lower more for a stronger lunge depth.", type: "warning" }, posture };
-        if (trunkScore < 60) return { feedback: { text: "Keep your torso upright during lunges.", type: "warning" }, posture };
-        return { feedback: { text: "Form looks good. Complete full lunge range to count a rep.", type: "success" }, posture };
+        let feedbackText = "Form looks good. Complete full lunge range to count a rep.";
+        let feedbackType: FeedbackType = "success";
+
+        if (lungePhaseRef.current === "standing") {
+          if (lungeKnee < 150) {
+            feedbackText = "Stand up straight to begin the lunge.";
+            feedbackType = "warning";
+          } else if (backAngle < 145) {
+            feedbackText = "Keep your torso upright.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Ready to start. Step forward into a lunge.";
+          }
+        } else if (lungePhaseRef.current === "descending") {
+          if (backAngle < 140) {
+            feedbackText = "Keep your chest up as you step.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Stepping forward... Lower your hips.";
+          }
+        } else if (lungePhaseRef.current === "bottom") {
+          if (lungeKnee > 140) {
+            feedbackText = "Lunge slightly deeper to reach the bottom.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Good depth! Push back to the starting position.";
+          }
+        } else if (lungePhaseRef.current === "rising") {
+          if (backAngle < 140) {
+            feedbackText = "Keep your torso upright as you push back.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Pushing back... Stand up fully.";
+          }
+        }
+
+        return { feedback: { text: feedbackText, type: feedbackType }, posture };
       }
 
       if (selectedExercise === "Jumping Jack") {
-        const wristSpread = Math.abs(lWrist.x - rWrist.x);
-        const ankleSpread = Math.abs(lAnkle.x - rAnkle.x);
+        if (!isVerticalTorso) {
+          commitChecks("jumping-jack:closed", []);
+          return { feedback: { text: "Please stand up to perform jumping jacks.", type: "warning" }, posture: 0 };
+        }
+        const wristSpread = Math.abs(lWrist.x - rWrist.x) * (aspectRatio / 1.777);
+        const ankleSpread = Math.abs(lAnkle.x - rAnkle.x) * (aspectRatio / 1.777);
         const armOpenScore = scoreInRange(wristSpread, 0.5, 0.85, 0.2);
         const legOpenScore = scoreInRange(ankleSpread, 0.42, 0.8, 0.2);
         const trunkScore = scoreFromRange(backAngle, 170, 40);
@@ -1338,14 +1549,15 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           jackCandidateFramesRef.current = 0;
         }
 
-        if (wristSpread > 0.45 && ankleSpread > 0.35) {
+        // Lenient jumping jack open gate: count if arms spread > 0.38 and legs > 0.28
+        if (wristSpread > 0.38 && ankleSpread > 0.28) {
           jackOpenReachedRef.current = true;
         }
 
         if (
           jackOpenReachedRef.current &&
-          wristSpread < 0.28 &&
-          ankleSpread < 0.22 &&
+          wristSpread < 0.32 &&
+          ankleSpread < 0.26 &&
           Date.now() - repLastCountTsRef.current > 400
         ) {
           if (IS_DEV) console.debug("[PoseDebug] Jumping Jack rep trigger", {
@@ -1394,20 +1606,41 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           },
         ]);
 
-        if (armOpenScore < 60) return { feedback: { text: "Open your arms wider for full jack range.", type: "warning" }, posture };
-        if (legOpenScore < 60) return { feedback: { text: "Jump your feet wider for full jack range.", type: "warning" }, posture };
-        return { feedback: { text: "Form looks good. Fully open and close to count each rep.", type: "success" }, posture };
+        let feedbackText = "Form looks good. Complete full jack range to count a rep.";
+        let feedbackType: FeedbackType = "success";
+
+        if (jackPhaseRef.current === "closed") {
+          if (wristSpread > 0.35 || ankleSpread > 0.25) {
+            feedbackText = "Start with feet together and arms at your sides.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Ready to start. Jump wide and raise your arms.";
+          }
+        } else if (jackPhaseRef.current === "open") {
+          if (wristSpread < 0.38 || ankleSpread < 0.28) {
+            feedbackText = "Jump wider and raise your arms higher.";
+            feedbackType = "warning";
+          } else {
+            feedbackText = "Good open width! Jump back to the closed position.";
+          }
+        }
+
+        return { feedback: { text: feedbackText, type: feedbackType }, posture };
       }
 
       if (selectedExercise === "Plank") {
+        if (isVerticalTorso) {
+          commitChecks("plank:hold", []);
+          return { feedback: { text: "Get into horizontal floor plank position. Standing posture does not count.", type: "warning" }, posture: 0 };
+        }
         const leftFootPoint = preferVisiblePoint(lAnkle, lKnee);
         const rightFootPoint = preferVisiblePoint(rAnkle, rKnee);
         const plankLineRaw =
-          (angleFromThreePoints(lShoulder, lHip, leftFootPoint) + angleFromThreePoints(rShoulder, rHip, rightFootPoint)) / 2;
+          (angleFromThreePoints(lShoulder, lHip, leftFootPoint, aspectRatio) + angleFromThreePoints(rShoulder, rHip, rightFootPoint, aspectRatio)) / 2;
         smoothedAnglesRef.current.plank = smoothValue(smoothedAnglesRef.current.plank, plankLineRaw);
         const plankLineAngle = smoothedAnglesRef.current.plank;
         const lineScore = scoreInRange(plankLineAngle, 155, 180, 25);
-        const shoulderStackScore = clamp(100 - (Math.abs(lShoulder.x - lElbow.x) + Math.abs(rShoulder.x - rElbow.x)) * 160, 0, 100);
+        const shoulderStackScore = clamp(100 - ((Math.abs(lShoulder.x - lElbow.x) + Math.abs(rShoulder.x - rElbow.x)) * (aspectRatio / 1.777)) * 160, 0, 100);
         const torsoYDelta = (Math.abs(lShoulder.y - lHip.y) + Math.abs(rShoulder.y - rHip.y)) / 2;
         const legYDelta = (Math.abs(lHip.y - leftFootPoint.y) + Math.abs(rHip.y - rightFootPoint.y)) / 2;
         const horizontalScore = Math.round(
@@ -1523,6 +1756,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
 
       const width = video.videoWidth || 1280;
       const height = video.videoHeight || 720;
+      const aspectRatio = width / height;
 
       canvas.width = width;
       canvas.height = height;
@@ -1555,7 +1789,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
         return;
       }
 
-      const distance = getDistanceStatus(selectedExercise, activeLandmarks);
+      const distance = getDistanceStatus(selectedExercise, activeLandmarks, aspectRatio);
       setDistanceStatus(distance.status);
       setDistanceHint(distance.hint);
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Camera, CameraOff, RotateCcw, Activity, CheckCircle2, AlertTriangle, Timer, RefreshCw } from "lucide-react";
 import { useLocation } from "react-router-dom";
@@ -266,6 +266,73 @@ export default function AITrainer() {
     }
   }, [hasProcessedState, location.state, cameraOn]);
 
+  const saveWorkoutLog = useCallback(async () => {
+    if (!user || savingWorkoutLog) {
+      return;
+    }
+
+    const durationSeconds = Math.max(1, elapsedSeconds);
+
+    // Calculate exact completed/started sets and reps per set to log actual work done
+    const actualSets = isPlank
+      ? (activePlankTime > 0 ? Math.max(1, Math.ceil(activePlankTime / targetPlankTime)) : 0)
+      : (reps > 0 ? Math.max(1, Math.ceil(reps / targetReps)) : 0);
+
+    const actualReps = isPlank
+      ? 0
+      : (actualSets > 0 ? Math.round(reps / actualSets) : 0);
+
+    setSavingWorkoutLog(true);
+    try {
+      await addFirestoreDoc("workouts", user.uid, {
+        exercise_name: selectedExercise,
+        sets: actualSets,
+        reps: actualReps,
+        duration_minutes: Number((durationSeconds / 60).toFixed(2)),
+        calories_burned: Number(calories.toFixed(1)),
+        workout_type: "AI Trainer",
+        ai_detected: true,
+        target_sets: targetSets,
+        target_reps: isPlank ? 0 : targetReps,
+        target_seconds: isPlank ? targetPlankTime : 0,
+        completed_sets: completedSets,
+        good_plank_seconds: Number(activePlankTime.toFixed(1)),
+        active_plank_seconds: Number(activePlankTime.toFixed(1)),
+        perfect_plank_seconds: Number(perfectPlankTime.toFixed(1)),
+        timestamp: serverTimestamp(),
+      });
+
+      toast({
+        title: "Workout logged",
+        description: "This session is now saved in Workout Tracker.",
+      });
+      setHasLoggedCurrentTarget(true);
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Unable to log workout",
+        description: "Please try saving this session again.",
+      });
+    } finally {
+      setSavingWorkoutLog(false);
+    }
+  }, [
+    user,
+    savingWorkoutLog,
+    elapsedSeconds,
+    selectedExercise,
+    isPlank,
+    completedSets,
+    targetSets,
+    reps,
+    calories,
+    targetReps,
+    targetPlankTime,
+    activePlankTime,
+    perfectPlankTime,
+    toast,
+  ]);
+
   useEffect(() => {
     const justStopped = previousCameraOnRef.current && !cameraOn;
     previousCameraOnRef.current = cameraOn;
@@ -313,6 +380,12 @@ export default function AITrainer() {
     };
 
     void saveAnalysis();
+
+    // Automatically log workout if there are reps counted or plank hold has started
+    const hasRepsOrPlankTime = (!isPlank && reps > 0) || (isPlank && activePlankTime > 0.5);
+    if (hasRepsOrPlankTime && !hasLoggedCurrentTarget) {
+      void saveWorkoutLog();
+    }
   }, [
     activePlankTime,
     calories,
@@ -326,6 +399,8 @@ export default function AITrainer() {
     selectedExercise,
     toast,
     user,
+    hasLoggedCurrentTarget,
+    saveWorkoutLog,
   ]);
 
   const toggleCamera = async () => {
@@ -341,49 +416,6 @@ export default function AITrainer() {
   const handleResetSession = () => {
     setHasLoggedCurrentTarget(false);
     resetSession();
-  };
-
-  const saveWorkoutLog = async () => {
-    if (!user || savingWorkoutLog) {
-      return;
-    }
-
-    const durationSeconds = Math.max(1, elapsedSeconds);
-
-    setSavingWorkoutLog(true);
-    try {
-      await addFirestoreDoc("workouts", user.uid, {
-        exercise_name: selectedExercise,
-        sets: isPlank ? completedSets : targetSets,
-        reps: isPlank ? 0 : reps,
-        duration_minutes: Number((durationSeconds / 60).toFixed(2)),
-        calories_burned: Number(calories.toFixed(1)),
-        workout_type: "AI Trainer",
-        ai_detected: true,
-        target_sets: targetSets,
-        target_reps: isPlank ? 0 : targetReps,
-        target_seconds: isPlank ? targetPlankTime : 0,
-        completed_sets: completedSets,
-        good_plank_seconds: Number(activePlankTime.toFixed(1)),
-        active_plank_seconds: Number(activePlankTime.toFixed(1)),
-        perfect_plank_seconds: Number(perfectPlankTime.toFixed(1)),
-        timestamp: serverTimestamp(),
-      });
-
-      toast({
-        title: "Workout logged",
-        description: "This session is now saved in Workout Tracker.",
-      });
-      setHasLoggedCurrentTarget(true);
-    } catch {
-      toast({
-        variant: "destructive",
-        title: "Unable to log workout",
-        description: "Please try saving this session again.",
-      });
-    } finally {
-      setSavingWorkoutLog(false);
-    }
   };
 
   return (
@@ -431,7 +463,7 @@ export default function AITrainer() {
                 />
                 <canvas
                   ref={canvasRef}
-                  className={`absolute inset-0 w-full h-full pointer-events-none transition-opacity ${cameraOn ? "opacity-100" : "opacity-0"}`}
+                  className={`absolute inset-0 w-full h-full object-cover pointer-events-none transition-opacity ${cameraOn ? "opacity-100" : "opacity-0"}`}
                 />
 
                 {cameraOn ? (
@@ -510,45 +542,45 @@ export default function AITrainer() {
           </div>
 
           {/* Stats Row */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
             {isPlank ? (
               <>
-                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
-                  <p className="text-sm text-muted-foreground mb-1">Plank Timer</p>
-                  <p className="text-2xl font-display font-bold text-primary">
+                <div className="bg-card rounded-xl border p-2 sm:p-4 shadow-card text-center">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Plank Timer</p>
+                  <p className="text-lg sm:text-2xl font-display font-bold text-primary">
                     {elapsedSeconds}s / {targetPlankTime}s
                   </p>
-                  <p className="text-[11px] text-muted-foreground mt-1">Good: {activePlankTime.toFixed(1)}s | Perfect: {perfectPlankTime.toFixed(1)}s</p>
+                  <p className="text-[9px] sm:text-[11px] leading-tight text-muted-foreground mt-1">Good: {activePlankTime.toFixed(1)}s | Perfect: {perfectPlankTime.toFixed(1)}s</p>
                   {perfectPlankTimeAtTarget > 0 && (
-                    <p className="text-[11px] text-emerald-300 mt-1">Perfect Recorded @ Target: {perfectPlankTimeAtTarget.toFixed(1)}s</p>
+                    <p className="text-[9px] sm:text-[11px] leading-tight text-emerald-300 mt-1">Perfect Recorded @ Target: {perfectPlankTimeAtTarget.toFixed(1)}s</p>
                   )}
                 </div>
-                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
-                  <p className="text-sm text-muted-foreground mb-1">Progress</p>
-                  <p className="text-3xl font-display font-bold">{Math.round(plankProgress)}%</p>
+                <div className="bg-card rounded-xl border p-2 sm:p-4 shadow-card text-center">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Progress</p>
+                  <p className="text-xl sm:text-3xl font-display font-bold">{Math.round(plankProgress)}%</p>
                   <Progress value={plankProgress} className="h-2 mt-2" />
                 </div>
-                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
-                  <p className="text-sm text-muted-foreground mb-1">Calories</p>
-                  <p className="text-3xl font-display font-bold text-accent">{calories}</p>
-                  <p className="text-[11px] text-muted-foreground mt-1">
+                <div className="bg-card rounded-xl border p-2 sm:p-4 shadow-card text-center">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Calories</p>
+                  <p className="text-xl sm:text-3xl font-display font-bold text-accent">{calories}</p>
+                  <p className="text-[9px] sm:text-[11px] leading-tight text-muted-foreground mt-1">
                     {plankCompleted ? "Goal reached! Keep holding" : "Time-based burn"}
                   </p>
                 </div>
               </>
             ) : (
               <>
-                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
-                  <p className="text-sm text-muted-foreground mb-1">Reps</p>
-                  <p className="text-3xl font-display font-bold text-primary">{reps}</p>
+                <div className="bg-card rounded-xl border p-2 sm:p-4 shadow-card text-center">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Reps</p>
+                  <p className="text-xl sm:text-3xl font-display font-bold text-primary">{reps}</p>
                 </div>
-                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
-                  <p className="text-sm text-muted-foreground mb-1">Posture Score</p>
-                  <p className="text-3xl font-display font-bold">{postureScore}%</p>
+                <div className="bg-card rounded-xl border p-2 sm:p-4 shadow-card text-center">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Posture Score</p>
+                  <p className="text-xl sm:text-3xl font-display font-bold">{postureScore}%</p>
                 </div>
-                <div className="bg-card rounded-xl border p-4 shadow-card text-center">
-                  <p className="text-sm text-muted-foreground mb-1">Calories</p>
-                  <p className="text-3xl font-display font-bold text-accent">{calories}</p>
+                <div className="bg-card rounded-xl border p-2 sm:p-4 shadow-card text-center">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Calories</p>
+                  <p className="text-xl sm:text-3xl font-display font-bold text-accent">{calories}</p>
                 </div>
               </>
             )}
