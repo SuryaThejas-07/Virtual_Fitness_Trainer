@@ -1,7 +1,4 @@
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -17,8 +14,6 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
-
-const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -36,32 +31,27 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AuthProvider>
-            <Layout>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-                <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
-                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                <Route path="/ai-trainer" element={<ProtectedRoute><AITrainer /></ProtectedRoute>} />
-                <Route path="/exercises" element={<ExerciseGuide />} />
-                <Route path="/workouts" element={<ProtectedRoute><WorkoutTracker /></ProtectedRoute>} />
-                <Route path="/nutrition" element={<ProtectedRoute><NutritionTracker /></ProtectedRoute>} />
-                <Route path="/health" element={<ProtectedRoute><HealthMonitoring /></ProtectedRoute>} />
-                <Route path="/analytics" element={<Navigate to="/health" replace />} />
-                <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Layout>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <Toaster />
+    <BrowserRouter>
+      <AuthProvider>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+            <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/ai-trainer" element={<ProtectedRoute><AITrainer /></ProtectedRoute>} />
+            <Route path="/exercises" element={<ExerciseGuide />} />
+            <Route path="/workouts" element={<ProtectedRoute><WorkoutTracker /></ProtectedRoute>} />
+            <Route path="/nutrition" element={<ProtectedRoute><NutritionTracker /></ProtectedRoute>} />
+            <Route path="/health" element={<ProtectedRoute><HealthMonitoring /></ProtectedRoute>} />
+            <Route path="/analytics" element={<Navigate to="/health" replace />} />
+            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Layout>
+      </AuthProvider>
+    </BrowserRouter>
   </ThemeProvider>
 );
 

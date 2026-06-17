@@ -7,8 +7,67 @@ import {
 } from "@mediapipe/pose";
 import * as drawingUtilsModule from "@mediapipe/drawing_utils";
 
+// Gate debug logging to development builds only
+const IS_DEV = import.meta.env.DEV;
+
 // Vite production build can resolve legacy UMD/CommonJS imports differently.
 // We implement a robust fallback strategy to retrieve drawConnectors and drawLandmarks safely.
+// When the MediaPipe drawing_utils library cannot be resolved, we use native Canvas2D drawing.
+
+// Native Canvas2D fallback: draw connection lines between landmarks
+const nativeDrawConnectors = (
+  ctx: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmarkList,
+  connections: [number, number][],
+  style: { color?: string; lineWidth?: number }
+): void => {
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+  ctx.save();
+  ctx.strokeStyle = style.color || "#22c55e";
+  ctx.lineWidth = style.lineWidth || 3;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  for (const [startIdx, endIdx] of connections) {
+    const startLm = landmarks[startIdx];
+    const endLm = landmarks[endIdx];
+    if (!startLm || !endLm) continue;
+    // Skip low-visibility landmarks
+    if ((startLm.visibility ?? 0) < 0.3 || (endLm.visibility ?? 0) < 0.3) continue;
+
+    ctx.beginPath();
+    ctx.moveTo(startLm.x * w, startLm.y * h);
+    ctx.lineTo(endLm.x * w, endLm.y * h);
+    ctx.stroke();
+  }
+  ctx.restore();
+};
+
+// Native Canvas2D fallback: draw landmark dots
+const nativeDrawLandmarks = (
+  ctx: CanvasRenderingContext2D,
+  landmarks: NormalizedLandmarkList,
+  style: { color?: string; lineWidth?: number; radius?: number }
+): void => {
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+  const r = style.radius || 3;
+  ctx.save();
+  ctx.fillStyle = style.color || "#14b8a6";
+  ctx.strokeStyle = style.color || "#14b8a6";
+  ctx.lineWidth = style.lineWidth || 2;
+
+  for (const lm of landmarks) {
+    if (!lm || (lm.visibility ?? 0) < 0.3) continue;
+    ctx.beginPath();
+    ctx.arc(lm.x * w, lm.y * h, r, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+};
+
 const getDrawingUtils = () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mod = drawingUtilsModule as any;
@@ -44,17 +103,39 @@ const getDrawingUtils = () => {
     }
   }
 
-  return {
-    drawConnectors: () => {
-      console.warn("drawConnectors is not available");
-    },
-    drawLandmarks: () => {
-      console.warn("drawLandmarks is not available");
-    },
-  };
+  return null;
 };
 
-const { drawConnectors, drawLandmarks } = getDrawingUtils();
+const mpDrawingUtils = getDrawingUtils();
+
+// Whether the MediaPipe drawing library resolved successfully
+const hasMediaPipeDrawing = mpDrawingUtils !== null;
+
+const FALLBACK_POSE_CONNECTIONS: [number, number][] = [
+  [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], // Arms & shoulders
+  [11, 23], [12, 24], [23, 24],                    // Torso & hips
+  [23, 25], [25, 27], [24, 26], [26, 28],          // Legs & ankles
+  [27, 29], [28, 30], [29, 31], [30, 32], [27, 31], [28, 32], // Feet
+  [15, 17], [15, 19], [15, 21], [16, 18], [16, 20], [16, 22], // Hands
+  [0, 1], [1, 2], [2, 3], [3, 7],                  // Left face
+  [0, 4], [4, 5], [5, 6], [6, 8],                  // Right face
+  [9, 10]                                          // Mouth
+];
+
+const getPoseConnections = (): [number, number][] => {
+  if (typeof POSE_CONNECTIONS !== "undefined" && Array.isArray(POSE_CONNECTIONS) && POSE_CONNECTIONS.length > 0) {
+    return POSE_CONNECTIONS as [number, number][];
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any;
+  if (w && w.POSE_CONNECTIONS && Array.isArray(w.POSE_CONNECTIONS) && w.POSE_CONNECTIONS.length > 0) {
+    return w.POSE_CONNECTIONS as [number, number][];
+  }
+  if (w && w.Pose && w.Pose.POSE_CONNECTIONS && Array.isArray(w.Pose.POSE_CONNECTIONS) && w.Pose.POSE_CONNECTIONS.length > 0) {
+    return w.Pose.POSE_CONNECTIONS as [number, number][];
+  }
+  return FALLBACK_POSE_CONNECTIONS;
+};
 
 export type ExerciseType = "Biceps Curl" | "Squat" | "Pushup" | "Lunge" | "Jumping Jack" | "Plank";
 export type DistanceStatus = "good" | "too-close" | "too-far" | "adjusting";
@@ -659,7 +740,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
 
         setReps((prev) => {
           const next = prev + 1;
-          console.debug("[PoseDebug] Rep count updated", {
+          if (IS_DEV) console.debug("[PoseDebug] Rep count updated", {
             exercise: selectedExercise,
             exerciseName,
             posture,
@@ -726,7 +807,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       const avgElbowAngle = smoothedAnglesRef.current.elbow;
       const backAngle = smoothedAnglesRef.current.back;
 
-      console.debug("[PoseDebug] Joint angles", {
+      if (IS_DEV) console.debug("[PoseDebug] Joint angles", {
         exercise: selectedExercise,
         kneeRaw,
         elbowRaw,
@@ -793,7 +874,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           avgKneeAngle >= 155 &&
           Date.now() - repLastCountTsRef.current > 400
         ) {
-          console.debug("[PoseDebug] Squat rep trigger", {
+          if (IS_DEV) console.debug("[PoseDebug] Squat rep trigger", {
             phase: squatPhaseRef.current,
             avgKneeAngle,
             squatDepthReached: squatDepthReachedRef.current,
@@ -926,7 +1007,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           avgElbowAngle >= 155 &&
           Date.now() - repLastCountTsRef.current > 400
         ) {
-          console.debug("[PoseDebug] Pushup rep trigger", {
+          if (IS_DEV) console.debug("[PoseDebug] Pushup rep trigger", {
             phase: pushupPhaseRef.current,
             avgElbowAngle,
             pushupDepthReached: pushupDepthReachedRef.current,
@@ -1048,7 +1129,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           curlMotionAngle >= adaptiveCurlBottom - 5 &&
           Date.now() - repLastCountTsRef.current > 400
         ) {
-          console.debug("[PoseDebug] Curl rep trigger", {
+          if (IS_DEV) console.debug("[PoseDebug] Curl rep trigger", {
             phase: curlPhaseRef.current,
             curlMotionAngle,
             adaptiveCurlTop,
@@ -1169,7 +1250,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           lungeKnee >= 150 &&
           Date.now() - repLastCountTsRef.current > 400
         ) {
-          console.debug("[PoseDebug] Lunge rep trigger", {
+          if (IS_DEV) console.debug("[PoseDebug] Lunge rep trigger", {
             phase: lungePhaseRef.current,
             lungeKnee,
             lungeDepthReached: lungeDepthReachedRef.current,
@@ -1267,7 +1348,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           ankleSpread < 0.22 &&
           Date.now() - repLastCountTsRef.current > 400
         ) {
-          console.debug("[PoseDebug] Jumping Jack rep trigger", {
+          if (IS_DEV) console.debug("[PoseDebug] Jumping Jack rep trigger", {
             phase: jackPhaseRef.current,
             wristSpread,
             ankleSpread,
@@ -1359,7 +1440,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
         // in a timer effect (300ms) to avoid frame-loop state churn.
         const nextActiveSeconds = plankAccumulatedMsRef.current / 1000;
 
-        console.debug("[PoseDebug] Plank timer", {
+        if (IS_DEV) console.debug("[PoseDebug] Plank timer", {
           posture,
           postureValid,
           activePlankTime: Number(nextActiveSeconds.toFixed(1)),
@@ -1478,8 +1559,21 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
       setDistanceStatus(distance.status);
       setDistanceHint(distance.hint);
 
-      drawConnectors(ctx, activeLandmarks, POSE_CONNECTIONS, { color: "#22c55e", lineWidth: 3 });
-      drawLandmarks(ctx, activeLandmarks, { color: "#14b8a6", lineWidth: 2, radius: 3 });
+      const connections = getPoseConnections();
+      if (hasMediaPipeDrawing) {
+        try {
+          mpDrawingUtils!.drawConnectors(ctx, activeLandmarks, connections, { color: "#22c55e", lineWidth: 3 });
+          mpDrawingUtils!.drawLandmarks(ctx, activeLandmarks, { color: "#14b8a6", lineWidth: 2, radius: 3 });
+        } catch {
+          // MediaPipe draw failed at runtime, use native fallback
+          nativeDrawConnectors(ctx, activeLandmarks, connections, { color: "#22c55e", lineWidth: 3 });
+          nativeDrawLandmarks(ctx, activeLandmarks, { color: "#14b8a6", lineWidth: 2, radius: 3 });
+        }
+      } else {
+        // MediaPipe drawing_utils not available, use native Canvas2D
+        nativeDrawConnectors(ctx, activeLandmarks, connections, { color: "#22c55e", lineWidth: 3 });
+        nativeDrawLandmarks(ctx, activeLandmarks, { color: "#14b8a6", lineWidth: 2, radius: 3 });
+      }
 
       const visibilityThreshold =
         selectedExercise === "Biceps Curl"
@@ -1502,7 +1596,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
           text: visibilityHelpText,
           type: "warning",
         });
-        console.debug("[PoseDebug] Low visibility warning", {
+        if (IS_DEV) console.debug("[PoseDebug] Low visibility warning", {
           exercise: selectedExercise,
           message: visibilityHelpText,
         });
@@ -1600,7 +1694,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
 
     for (const baseUrl of POSE_ASSET_BASE_URLS) {
       try {
-        diagnostics.push(`\n📍 Trying: ${baseUrl}`);
+        diagnostics.push(`\n> Trying: ${baseUrl}`);
         
         // Pre-check: verify critical assets exist before instantiating Pose
         const criticalAssets = ["pose_web.binarypb", "pose_solution_wasm_bin.js"];
@@ -1618,22 +1712,22 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
               throw new Error(`Asset HTTP error: ${response.status}`);
             }
           } catch (fetchErr) {
-            diagnostics.push(`  ${asset}: ❌ Fetch failed - ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`);
+            diagnostics.push(`  ${asset}: [FAIL] Fetch failed - ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`);
             throw fetchErr;
           }
         }
         
-        diagnostics.push(`✓ Assets verified at ${baseUrl}`);
-        diagnostics.push(`📦 Checking global Pose availability...`);
+        diagnostics.push(`[OK] Assets verified at ${baseUrl}`);
+        diagnostics.push(`Checking global Pose availability...`);
         
         // Check if Pose is available before trying to instantiate
         if (typeof mpWindow.Pose === "undefined") {
-          diagnostics.push("⚠️ window.Pose is undefined at this moment");
+          diagnostics.push("[WARN] window.Pose is undefined at this moment");
         } else {
-          diagnostics.push(`✓ window.Pose is defined (type: ${typeof mpWindow.Pose})`);
+          diagnostics.push(`[OK] window.Pose is defined (type: ${typeof mpWindow.Pose})`);
         }
         
-        diagnostics.push(`🚀 Calling Pose constructor...`);
+        diagnostics.push(`Calling Pose constructor...`);
 
         // Prefer the runtime global `window.Pose` (UMD/WASM loader). If it's not
         // available, dynamically import the `@mediapipe/pose` module and use its
@@ -1670,9 +1764,9 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
             });
           }
 
-          diagnostics.push(`✓ Pose constructor succeeded`);
+          diagnostics.push(`[OK] Pose constructor succeeded`);
         } catch (ctorErr) {
-          diagnostics.push(`❌ Pose constructor failed - ${ctorErr instanceof Error ? ctorErr.message : String(ctorErr)}`);
+          diagnostics.push(`[FAIL] Pose constructor failed - ${ctorErr instanceof Error ? ctorErr.message : String(ctorErr)}`);
           throw ctorErr;
         }
 
@@ -1693,12 +1787,12 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
         }
 
         poseRef.current = pose;
-        console.log("✅ Pose initialized successfully:", diagnostics.join("\n"));
+        if (IS_DEV) console.log("Pose initialized successfully:", diagnostics.join("\n"));
         return;
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : String(error);
         const errName = error instanceof Error ? error.name : "Unknown";
-        diagnostics.push(`❌ Error (${errName}): ${errMsg}`);
+        diagnostics.push(`[FAIL] Error (${errName}): ${errMsg}`);
         
         // Capture stack trace if available
         if (error instanceof Error && error.stack) {
@@ -1875,7 +1969,7 @@ export function usePoseDetection(selectedExercise: ExerciseType): UsePoseDetecti
         }
       }
 
-      console.debug("[PoseDebug] Plank UI timer tick", {
+      if (IS_DEV) console.debug("[PoseDebug] Plank UI timer tick", {
         activePlankTime: Number(activeSeconds.toFixed(1)),
         elapsedTimer: Number(elapsedSeconds.toFixed(1)),
         targetPlankTime,
